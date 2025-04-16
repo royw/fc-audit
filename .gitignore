@@ -1,0 +1,6 @@
+	.coverage
+	.vscode/
+	README.md
+	pyproject.toml
+	tests/
+	uv.lock

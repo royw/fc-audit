@@ -1,0 +1,30 @@
+PK
+    ��V            
+   Document.xml<?xml version='1.0' encoding='utf-8'?>
+<Document SchemaVersion="4" ProgramVersion="0.20.2" FileVersion="1">
+    <Properties Count="4">
+        <Property name="Author" type="String" value="Test User"/>
+        <Property name="Comment" type="String" value="Test Document"/>
+        <Property name="Company" type="String" value="Test Company"/>
+        <Property name="CreatedBy" type="String" value="FreeCAD"/>
+    </Properties>
+    <Objects Count="2">
+        <Object type="Spreadsheet::Sheet" name="Sheet" id="1">
+            <Properties>
+                <Property name="CellContent" type="String" value="A1=Length"/>
+                <Property name="CellContent" type="String" value="A2=Width"/>
+                <Property name="CellContent" type="String" value="A3=Height"/>
+            </Properties>
+        </Object>
+        <Object type="Part::Box" name="Box" id="2">
+            <Properties>
+                <Property name="Length" type="String" value="<<Sheet.Length>>"/>
+                <Property name="Width" type="String" value="<<Sheet.Width>>"/>
+                <Property name="Height" type="String" value="<<Sheet.Height>>"/>
+            </Properties>
+        </Object>
+    </Objects>
+</Document>
+PK
+    ��V               GuiDocument.xmlPK 
+     ��V                       �A    Document.xmlPK      9   4    
