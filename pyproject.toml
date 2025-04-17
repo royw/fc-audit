@@ -2,7 +2,39 @@
 name = "fc-audit"
 version = "0.1.0"
 description = "Command line audit tool"
-requires-python = ">=3.12"
+readme = "README.md"
+
+requires-python = ">=3.10"
+
+authors = [
+  {name = "Roy Wright", email = "roy@wright.org"}
+]
+
+maintainers = [
+  {name = "Roy Wright", email = "roy@wright.org"}
+]
+
+license = {file = "LICENSES/MIT.txt"}
+
+keywords = ["python", "CLI", "FreeCAD"]
+
+# Trove classifiers (https://pypi.org/classifiers/) which apply to the project.
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Natural Language :: English",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Topic :: Multimedia :: Graphics :: 3D Modeling"
+]
+
+# There are three tables related to entry points. The [project.scripts] table corresponds to the
+# console_scripts group in the entry points specification. The key of the table is the name of the entry
+# point and the value is the object reference.
+scripts = {'fc-audit' = "fc_audit.__main__:main"}
+
 dependencies = [
     "loguru>=0.7.2",
     "lxml>=5.1.0",
@@ -15,12 +47,95 @@ dependencies = [
 dev = [
     "pytest>=8.0.0",
     "pytest-cov>=4.1.0",
+    "pytest-mock>=3.12.0",
+    "pytest-mypy>=0.10.3",
+    "tox>=4.25.0",
 ]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.coverage.run]
+source_pkgs = ["fc_audit"]
+branch = true
+parallel = true
+omit = [
+  "fc_audit/__init__.py",
+]
+
+[tool.coverage.paths]
+source = ["fc_audit"]
+tests = ["tests"]
+
+[tool.coverage.report]
+exclude_lines = [
+  "no cov",
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+]
+
+# pytest config
 [tool.pytest.ini_options]
-addopts = "--cov=fc_audit"
-testpaths = ["tests"]
+minversion = "6.0"
+addopts = [
+#  "-n", "auto",
+  "-ra", "--showlocals",
+  "--strict-markers",
+  "--strict-config",
+#  "--import-mode=importlib",
+  "--cov=fc_audit",
+]
+xfail_strict = true
+filterwarnings = [
+  "error",
+]
+log_cli_level = "INFO"
+pythonpath = "src"
+testpaths = [
+    "tests"
+]
+
+# tox config
+[tool.tox]
+legacy_tox_ini = """
+[tox]
+env_list = 
+    py{310,311,312}
+    lint
+    type
+isolated_build = True
+addopts = -ra -q
+
+[testenv]
+description = Run unit tests
+package = wheel
+wheel_build_env = .pkg
+deps =
+    pytest>=8.0.0
+    pytest-cov>=4.1.0
+    pytest-mock>=3.12.0
+setenv =
+    PYTHONPATH = {toxinidir}/src:{toxinidir}
+commands =
+#    pytest {posargs:tests}
+    pytest {tty:--color=yes} tests/ --import-mode importlib
+
+[testenv:lint]
+description = Run linting checks
+deps =
+    ruff>=0.11.5
+commands =
+    ruff check --fix src tests
+
+[testenv:type]
+description = Run type checks
+deps =
+    mypy>=1.15.0
+    pytest-mypy>=0.10.3
+commands =
+    mypy --namespace-packages src tests
+"""
+
+[tool.hatch.build]
+packages = ["src/fc_audit"]

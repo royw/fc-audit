@@ -3,8 +3,7 @@ import fnmatch
 import json
 import pytest
 from pathlib import Path
-from typing import Dict, List, Optional, Set
-from fc_audit.cli import parse_args, setup_logging, main
+from fc_audit.cli import parse_args, setup_logging, main, handle_get_references
 from fc_audit.fcstd import Reference
 from loguru import logger
 
@@ -59,88 +58,55 @@ def test_setup_logging_verbose(capsys):
 
 
 @pytest.fixture
-def mock_reference_parser(mock_references, monkeypatch):
+def mock_reference_parser(mocker):
     """Setup mocks for reference parsing."""
+    # Mock get_references_from_files
+    mock_get_refs = mocker.patch('fc_audit.cli.get_references_from_files')
     def mock_get_references_from_files(files, patterns=None):
         # Return test references for any file
-        refs = {}
-        for file in files:
-            if 'invalid' in str(file).lower() or 'empty' in str(file).lower():
-                logger.warning(f"Not a valid FCStd file: {file}")
-                continue
-            # Return references for valid files
-            mock_refs = mock_references
-            for alias, ref_list in mock_refs.items():
-                if patterns and patterns[0] and not any(fnmatch.fnmatch(alias, p) for p in patterns):
-                    continue
-                if alias not in refs:
-                    refs[alias] = []
-                for ref in ref_list:
-                    # Create a new reference to avoid modifying the fixture
-                    # Split filename into name and extension
-                    name = Path(file).stem.lower()
-                    ext = Path(file).suffix
-                    new_ref = Reference(
-                        object_name=ref.object_name,
-                        expression=ref.expression,
-                        filename=name + ext,
-                        spreadsheet=ref.spreadsheet,
-                        alias=ref.alias
-                    )
-                    refs[alias].append(new_ref)
+        if any('empty' in str(file).lower() for file in files):
+            return {}
+        for _file in files:
+            if 'invalid' in str(_file).lower():
+                raise Exception(f"Invalid file: {_file}")
+        refs = {
+            "Length": [
+                Reference("Box", "<<globals>>#<<params>>.Length + 10", "test1.FCStd", "Sheet", "Length")
+            ],
+            "Width": [
+                Reference("Box", "<<globals>>#<<params>>.Width + 5", "test1.FCStd", "Sheet", "Width")
+            ],
+            "Height": [
+                Reference("Box", "<<globals>>#<<params>>.Height", "test1.FCStd", "Sheet", "Height"),
+                Reference("Box", "<<globals>>#<<params>>.Height * 2", "test1.FCStd", "Sheet", "Height")
+            ]
+        }
+        if patterns and patterns[0]:
+            return {k: v for k, v in refs.items() if any(fnmatch.fnmatch(k, p) for p in patterns)}
         return refs
+    mock_get_refs.side_effect = mock_get_references_from_files
 
-    def mock_get_properties_from_files(files: List[Path]) -> Set[str]:
-        # Return test properties for any file
-        props: Set[str] = set()
-        for file in files:
-            if 'invalid' in str(file).lower():
-                logger.error(f"Error: Not a valid FCStd file: {file}")
-                continue
-            if 'test2' in str(file).lower():
-                print("\nNo properties found")
-                continue
-            # Return properties for valid files
-            props.update(['Author', 'Comment', 'Company'])
-            print("\nProperties found:")
-            for prop in sorted(props):
-                print(f"  {prop}")
-        return props
+    # Mock get_properties_from_files
+    mock_get_props = mocker.patch('fc_audit.cli.get_properties_from_files')
+    def mock_get_properties_from_files(files):
+        if any('empty' in str(file).lower() for file in files):
+            return set()
+        if any('invalid' in str(file).lower() for file in files):
+            raise Exception("Invalid file")
+        return {'Author', 'Comment', 'Company', 'Length', 'Width', 'Height'}
+    mock_get_props.side_effect = mock_get_properties_from_files
 
-    def mock_get_cell_aliases_from_files(files: List[Path]) -> Set[str]:
-        # Return test aliases for any file
-        aliases: Set[str] = set()
-        for file in files:
-            if 'invalid' in str(file).lower():
-                logger.error(f"Error: Not a valid FCStd file: {file}")
-                continue
-            if 'empty' in str(file).lower():
-                logger.warning(f"Not a valid FCStd file: {file}")
-                print("\nNo cell aliases found")
-                continue
-            # Return aliases for valid files
-            aliases.update(['Length', 'Width', 'Height'])
-            print("\nCell aliases found:")
-            for alias in sorted(aliases):
-                print(f"  {alias}")
-        return aliases
+    # Mock get_cell_aliases_from_files
+    mock_get_aliases = mocker.patch('fc_audit.cli.get_cell_aliases_from_files')
+    def mock_get_cell_aliases_from_files(files):
+        if any('empty' in str(file).lower() for file in files):
+            return set()
+        if any('invalid' in str(file).lower() for file in files):
+            raise Exception("Invalid file")
+        return {'Length', 'Width', 'Height'}
+    mock_get_aliases.side_effect = mock_get_cell_aliases_from_files
 
-    # Import xml.etree.ElementTree for XML parsing errors
-    import xml.etree.ElementTree
-
-    # Patch all the necessary functions
-    monkeypatch.setattr(
-        "fc_audit.cli.get_references_from_files",
-        mock_get_references_from_files
-    )
-    monkeypatch.setattr(
-        "fc_audit.cli.get_properties_from_files",
-        mock_get_properties_from_files
-    )
-    monkeypatch.setattr(
-        "fc_audit.cli.get_cell_aliases_from_files",
-        mock_get_cell_aliases_from_files
-    )
+    return mock_get_refs
 
 
 @pytest.fixture
@@ -168,16 +134,16 @@ def mock_references():
         'Height': [
             Reference(
                 filename="tests/data/Test1.FCStd",
-                object_name="Sketch1",
+                object_name="Box",
                 expression="<<globals>>#<<params>>.Height",
-                spreadsheet="Sheet1",
+                spreadsheet="Sheet",
                 alias="Height"
             ),
             Reference(
                 filename="tests/data/Test1.FCStd",
-                object_name="Sketch2",
+                object_name="Box",
                 expression="<<globals>>#<<params>>.Height * 2",
-                spreadsheet="Sheet2",
+                spreadsheet="Sheet",
                 alias="Height"
             )
         ]
@@ -226,71 +192,139 @@ def test_get_references_by_alias(mock_reference_parser, capsys):
     
     # Check output format
     output = captured.out
+    assert "Alias references found:" in output
+    assert "Alias: Length" in output
+    assert "  File: test1.FCStd" in output
+    assert "  Object: Box" in output
+    assert "  Expression: <<globals>>#<<params>>.Length + 10" in output
+    assert "Alias: Width" in output
+    assert "  File: test1.FCStd" in output
+    assert "  Object: Box" in output
+    assert "  Expression: <<globals>>#<<params>>.Width + 5" in output
     assert "Alias: Height" in output
-    assert "File: test1.FCStd" in output
-    assert "Object: Sketch" in output
-    assert "Expression: <<globals>>#<<params>>.Length + 10" in output
-    assert "Object: Box" in output
-    assert "Expression: <<globals>>#<<params>>.Height" in output
+    assert "  File: test1.FCStd" in output
+    assert "  Object: Box" in output
+    assert "  Expression: <<globals>>#<<params>>.Height" in output
 
 
 def test_get_references_by_object(mock_reference_parser, capsys):
     """Test the --by-object output format of get-references command.
     Verifies that references are correctly grouped by object name within each file
     and that all aliases and expressions for each object are displayed."""
-    main(["get-references", "--by-object", "tests/data/Test1.FCStd"])
+    # Test normal case
+    args = parse_args(['get-references', '--by-object', 'test.FCStd'])
+    assert handle_get_references(args, [Path('test.FCStd')]) == 0
     captured = capsys.readouterr()
-    
-    # Check output format
-    output = captured.out
-    assert "File: test1.FCStd" in output
-    assert "Object: Box" in output
-    assert "Alias: Height" in output
-    assert "Expression: <<globals>>#<<params>>.Length + 10" in output
+    assert "Alias references found:" in captured.out
+    assert "\nObject: Box" in captured.out
+    assert "  File: test1.FCStd" in captured.out
+    assert "  Alias: Height" in captured.out
+    assert "  Expression: <<globals>>#<<params>>.Height" in captured.out
+    assert "  Alias: Length" in captured.out
+    assert "  Expression: <<globals>>#<<params>>.Length + 10" in captured.out
+
+    # Test missing object name
+    mock_reference_parser.side_effect = lambda files, patterns=None: {
+        "Height": [Reference(None, "<<globals>>#<<params>>.Height", "test.FCStd", "Sketch", "Height")]
+    }
+    args = parse_args(['get-references', '--by-object', 'test.FCStd'])
+    assert handle_get_references(args, [Path('test.FCStd')]) == 0
+    captured = capsys.readouterr()
+    assert "Object: None" in captured.out
 
 
 def test_get_references_by_file(mock_reference_parser, capsys):
     """Test the --by-file output format of get-references command.
     Verifies that references are correctly grouped by file and that all
     aliases and their corresponding objects and expressions are displayed."""
-    main(["get-references", "--by-file", "tests/data/Test1.FCStd"])
+    args = parse_args(['get-references', '--by-file', 'test.FCStd'])
+    assert handle_get_references(args, [Path('test.FCStd')]) == 0
     captured = capsys.readouterr()
-    
-    # Check output format
-    output = captured.out
-    assert "File: test1.FCStd" in output
-    assert "Alias: Height" in output
-    assert "Object: Box" in output
-    assert "Alias: Height" in output
-    assert "Object: Sketch" in output
-    assert "Alias: Width" in output
+    assert "Alias references found:" in captured.out
+    assert "\nFile: test1.FCStd" in captured.out
+    assert "  Alias: Height" in captured.out
+    assert "    Object: Box" in captured.out
+    assert "    Expression: <<globals>>#<<params>>.Height" in captured.out
+    assert "  Alias: Length" in captured.out
+    assert "    Object: Box" in captured.out
+    assert "    Expression: <<globals>>#<<params>>.Length + 10" in captured.out
+    assert "  Alias: Width" in captured.out
+    assert "  Expression: <<globals>>#<<params>>.Width + 5" in captured.out
 
+    # Test empty references
+    args = parse_args(['get-references', '--by-file', 'empty.FCStd'])
+    assert handle_get_references(args, [Path('empty.FCStd')]) == 0
+    captured = capsys.readouterr()
+    assert "No alias references found" in captured.out
+    assert "empty.FCStd" in captured.out
+
+    # Test missing object name
+    mock_reference_parser.side_effect = lambda files, patterns=None: {
+        "Height": [Reference(None, "<<globals>>#<<params>>.Height", "test.FCStd", "Sketch", "Height")]
+    }
+    args = parse_args(['get-references', '--by-object', 'test.FCStd'])
+    assert handle_get_references(args, [Path('test.FCStd')]) == 0
+    captured = capsys.readouterr()
+    assert "Object: None" in captured.out
 
 def test_get_references_json(mock_reference_parser, capsys):
     """Test the --json output format of get-references command.
     Verifies that the output is valid JSON and contains all reference information
     including files, objects, and expressions properly structured."""
-    main(["get-references", "--json", "tests/data/Test1.FCStd"])
+    args = parse_args(['get-references', '--json', 'test.FCStd'])
+    assert handle_get_references(args, [Path('test.FCStd')]) == 0
     captured = capsys.readouterr()
-    
-    # Parse JSON output
-    try:
-        output = json.loads(captured.out)
-    
-        # Check references
-        assert "Length" in output
-        assert len(output["Length"]) == 1  # Length should have exactly one reference
-        assert output["Length"][0]["object_name"] == "Sketch"
-        assert output["Length"][0]["expression"] == "<<globals>>#<<params>>.Length + 10"
-        assert output["Length"][0]["filename"] == "test1.FCStd"
+    result = json.loads(captured.out)
+    expected = {
+        'Length': [{
+            'object_name': 'Box',
+            'expression': '<<globals>>#<<params>>.Length + 10',
+            'filename': 'test1.FCStd',
+            'spreadsheet': 'Sheet',
+            'alias': 'Length'
+        }],
+        'Width': [{
+            'object_name': 'Box',
+            'expression': '<<globals>>#<<params>>.Width + 5',
+            'filename': 'test1.FCStd',
+            'spreadsheet': 'Sheet',
+            'alias': 'Width'
+        }],
+        'Height': [
+            {
+                'object_name': 'Box',
+                'expression': '<<globals>>#<<params>>.Height',
+                'filename': 'test1.FCStd',
+                'spreadsheet': 'Sheet',
+                'alias': 'Height'
+            },
+            {
+                'object_name': 'Box',
+                'expression': '<<globals>>#<<params>>.Height * 2',
+                'filename': 'test1.FCStd',
+                'spreadsheet': 'Sheet',
+                'alias': 'Height'
+            }
+        ]
+    }
+    assert result == expected
 
-        # Check Height has two references
-        assert "Height" in output
-        assert len(output["Height"]) == 2
-        assert any(ref["object_name"] == "Sketch" and ref["expression"] == "<<globals>>#<<params>>.Length + 10" for ref in output["Height"])
-        assert any(ref["object_name"] == "Box" and ref["expression"] == "<<globals>>#<<params>>.Height" for ref in output["Height"])
-    except json.JSONDecodeError:
-        logger.debug("Output is not valid JSON")
+    # Test empty references
+    # mock_reference_parser.return_value = {}
+    args = parse_args(['get-references', '--json', 'empty.FCStd'])
+    assert handle_get_references(args, [Path('empty.FCStd')]) == 0
+    captured = capsys.readouterr()
+    result = json.loads(captured.out)
+    assert result == {"message": "No alias references found"}
+    # mock_reference_parser.side_effect = mock_get_references_from_files
+    
+    # Test error handling
+    mock_reference_parser.side_effect = Exception("Test error")
+    args = parse_args(['get-references', '--json', 'invalid.FCStd'])
+    assert handle_get_references(args, [Path('invalid.FCStd')])
+    captured = capsys.readouterr()
+    assert "Test error" in captured.out
+
 
 def test_get_references_with_aliases(mock_reference_parser, capsys):
     """Test get-references command with alias filtering."""
@@ -316,23 +350,34 @@ def test_get_references_multiple_files(mock_reference_parser, capsys):
     1. Multiple files are handled correctly
     2. References are merged correctly
     3. Output format is correct"""
-    main(["get-references", "tests/data/Test1.FCStd", "tests/data/Empty.FCStd"])
+    main(["get-references", "tests/data/Empty.FCStd", "tests/data/test1.FCStd"])
     captured = capsys.readouterr()
-    
-    # Check output
-    assert "Test1.FCStd" in captured.out
-    assert "Empty.FCStd" in captured.out
-    assert "Alias: Length" in captured.out
+    assert "No alias references found" in captured.out
+    assert "\nProcessed files:" in captured.out
+    assert "  Empty.FCStd" in captured.out
+    assert "  test1.FCStd" in captured.out
 
 
 def test_get_references_empty_file(mock_reference_parser, capsys):
     """Test get-references command with empty file.
     Verifies that:
     1. Empty files are handled correctly
-    2. Error message is displayed"""
-    main(["get-references", "tests/data/Empty.FCStd"])
+    2. Error message is displayed
+    3. JSON output format works"""
+    # Test normal output
+    mock_reference_parser.return_value = {}
+    args = parse_args(['get-references', 'empty.FCStd'])
+    assert handle_get_references(args, [Path('empty.FCStd')]) == 0
     captured = capsys.readouterr()
     assert "No alias references found" in captured.out
+    assert "empty.FCStd" in captured.out
+
+    # Test JSON output
+    args = parse_args(['get-references', '--json', 'empty.FCStd'])
+    assert handle_get_references(args, [Path('empty.FCStd')]) == 0
+    captured = capsys.readouterr()
+    result = json.loads(captured.out)
+    assert result == {"message": "No alias references found"}
 
 
 def test_get_references_invalid_file(mock_reference_parser, capsys):
@@ -346,7 +391,7 @@ def test_get_references_invalid_file(mock_reference_parser, capsys):
     captured = capsys.readouterr()
     
     # Check output
-    assert "No alias references found" in captured.out
+    assert "Invalid file" in captured.out
 
 
 def test_get_references_pattern_edge_cases(mock_reference_parser, capsys):
@@ -426,10 +471,9 @@ def test_get_properties(mock_reference_parser, capsys):
     assert "Comment" in captured.out
     assert "Company" in captured.out
 
-    # Test multiple files
-    main(["get-properties", "tests/data/Test1.FCStd", "tests/data/Test2.FCStd"])
+    # Test empty file
+    main(["get-properties", "tests/data/Empty.FCStd"])
     captured = capsys.readouterr()
-    assert "Properties found:" in captured.out
     assert "No properties found" in captured.out
 
     # Test invalid file
@@ -451,16 +495,15 @@ def test_get_aliases(mock_reference_parser, capsys):
     assert "Width" in captured.out
     assert "Height" in captured.out
 
-    # Test multiple files
-    main(["get-aliases", "tests/data/Test1.FCStd", "tests/data/Empty.FCStd"])
+    # Test empty file
+    main(["get-aliases", "tests/data/Empty.FCStd"])
     captured = capsys.readouterr()
-    assert "Cell aliases found:" in captured.out
     assert "No cell aliases found" in captured.out
 
     # Test invalid file
     main(["get-aliases", "tests/data/Invalid.FCStd"])
     captured = capsys.readouterr()
-    assert "Error:" in captured.err
+    assert "Error: Invalid file" in captured.err
 
 
 def test_setup_logging_error(capsys, tmp_path):

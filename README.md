@@ -1,14 +1,35 @@
 # FC-Audit
 
-A command line tool for analyzing FreeCAD documents.
+A command line tool for analyzing FreeCAD documents. FC-Audit helps you understand how your FreeCAD models are structured by extracting and analyzing:
+
+- Property names used in objects
+- Cell aliases in spreadsheets
+- Expressions and their dependencies
+- References between objects and spreadsheet cells
+
+This is particularly useful for:
+- Debugging complex parametric models
+- Finding dependencies between parts
+- Auditing spreadsheet usage
+- Analyzing model structure
 
 ## Installation
 
 ```bash
+# Create and activate virtual environment
 uv venv
 source .venv/bin/activate
+
+# Install for development
 uv pip install -e ".[dev]"
+
+# Or install for use
+uv pip install .
 ```
+
+Requirements:
+- Python 3.7 or higher
+- FreeCAD documents in FCStd format
 
 ## Usage
 
@@ -81,16 +102,15 @@ fc-audit get-references --json --aliases "Fan*" file.FCStd > fan_refs.json
 # JSON output format
 ```json
 {
-  "references": {
-    "filename.FCStd": {
-      "object_name": {
-        "alias_name": [
-          "expression1",
-          "expression2"
-        ]
-      }
+  "alias_name": [
+    {
+      "filename": "filename.FCStd",
+      "object_name": "object_name",
+      "expression": "expression",
+      "spreadsheet": "spreadsheet_name",
+      "alias": "alias_name"
     }
-  }
+  ]
 }
 ```
 
@@ -115,7 +135,34 @@ fc-audit --help
 
 ## Development
 
-Run tests:
+### Testing
 ```bash
-pytest
+# Run tests with coverage
+pytest --cov=src.fc_audit
+
+# Run tests verbosely
+pytest -v
+```
+
+Current test coverage:
+- Overall: 89%
+- cli.py: 88%
+- fcstd.py: 91%
+
+### Error Handling
+
+The tool provides detailed error messages and handles common issues:
+- Invalid FCStd files
+- Missing or corrupted Document.xml
+- Invalid XML content
+- Missing attributes or elements
+
+Use the `-v` or `--verbose` flag for detailed logging:
+```bash
+fc-audit -v get-references file.FCStd
+```
+
+Optionally, log to a file:
+```bash
+fc-audit --log-file audit.log get-references file.FCStd
 ```

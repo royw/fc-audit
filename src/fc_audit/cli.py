@@ -4,16 +4,16 @@ import fnmatch
 import json
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Set, Tuple
 from loguru import logger
 
 from .fcstd import (
     get_properties_from_files,
     get_cell_aliases_from_files,
-    get_references,
     get_references_from_files,
-    Reference
+    Reference,
 )
+
 
 
 def setup_logging(log_file: Optional[str] = None, verbose: bool = False) -> None:
@@ -90,7 +90,22 @@ def parse_args(args=None) -> argparse.Namespace:
 
 
 def format_by_object(references: Dict[str, List[Reference]]) -> Dict[str, Dict[str, Dict[str, List[Reference]]]]:
-    """Format references grouped by object."""
+    """Format references grouped by file and object.
+    
+    Args:
+        references: Dictionary mapping alias names to lists of references
+        
+    Returns:
+        Dictionary with structure:
+        {
+            filename: {
+                object_name: {
+                    alias: [references]
+                }
+            }
+        }
+        Returns empty dict if references is empty.
+    """
     if not references:
         return {}
     by_file_obj: Dict[str, Dict[str, Dict[str, List[Reference]]]] = {}
@@ -108,7 +123,20 @@ def format_by_object(references: Dict[str, List[Reference]]) -> Dict[str, Dict[s
 
 
 def format_by_file(references: Dict[str, List[Reference]]) -> Dict[str, Dict[str, List[Reference]]]:
-    """Format references grouped by file."""
+    """Format references grouped by file and alias.
+    
+    Args:
+        references: Dictionary mapping alias names to lists of references
+        
+    Returns:
+        Dictionary with structure:
+        {
+            filename: {
+                alias: [references]
+            }
+        }
+        Returns empty dict if references is empty.
+    """
     if not references:
         return {}
     by_file: Dict[str, Dict[str, List[Reference]]] = {}
@@ -174,11 +202,21 @@ def print_references_by_object(references: Dict[str, List[Reference]]) -> None:
     """Print references grouped by object name.
     
     Args:
-        references: Dictionary of references grouped by alias name
+        references: Dictionary mapping alias names to lists of references
+        
+    Output format:
+        Object: <object_name>
+          File: <filename>
+          Alias: <alias_name>
+          Expression: <expression>
+    
+    If references is empty, prints "No alias references found".
     """
     if not references:
         print("No alias references found")
         return
+
+    print("Alias references found:")
 
     # Reorganize references by object name
     by_object: Dict[str, List[Reference]] = {}
@@ -199,14 +237,24 @@ def print_references_by_object(references: Dict[str, List[Reference]]) -> None:
 
 
 def print_references_by_file(references: Dict[str, List[Reference]]) -> None:
-    """Print references grouped by file.
-    
+    """Print references grouped by file and alias.
+
     Args:
-        references: Dictionary of references to print
+        references: Dictionary mapping alias names to lists of references
+
+    Output format:
+        File: <filename>
+          Alias: <alias_name>
+            Object: <object_name>
+            Expression: <expression>
+
+    If references is empty, prints "No alias references found".
     """
     if not references:
         print("No alias references found")
         return
+
+    print("Alias references found:")
 
     by_file = format_by_file(references)
 
@@ -223,11 +271,21 @@ def print_references_by_alias(references: Dict[str, List[Reference]]) -> None:
     """Print references grouped by alias name.
     
     Args:
-        references: Dictionary of references grouped by alias name
+        references: Dictionary mapping alias names to lists of references
+        
+    Output format:
+        Alias: <alias_name>
+          File: <filename>
+          Object: <object_name>
+          Expression: <expression>
+    
+    If references is empty, prints "No alias references found".
     """
     if not references:
         print("No alias references found")
         return
+
+    print("Alias references found:")
 
     for alias, refs in sorted(references.items()):
         print(f"Alias: {alias}")
@@ -238,34 +296,129 @@ def print_references_by_alias(references: Dict[str, List[Reference]]) -> None:
             print()
 
 
-def handle_get_properties(files: List[Path]) -> None:
+def handle_get_properties(files: List[Path]) -> int:
     """Handle get-properties command.
     
     Args:
-        files: List of files to process
+        files: List of FCStd files to process
+        
+    Returns:
+        Exit code (0 for success, 1 for error)
     """
-    properties = get_properties_from_files(files)
-    if not properties:
-        print("\nNo properties found\n")
-        return
-    print("\nProperties found:\n")
-    for prop in sorted(properties):
-        print(f"  {prop}")
+    try:
+        properties = get_properties_from_files(files)
+        if not properties:
+            print("\nNo properties found\n")
+            return 1
+        print("\nProperties found:\n")
+        for prop in sorted(properties):
+            print(f"  {prop}")
+        return 0
+    except Exception as e:
+        logger.error(f"Error: {e}")
+        print(f"Error: {e}")
+        return 1
 
 
-def handle_get_aliases(files: List[Path]) -> None:
+def handle_get_aliases(files: List[Path]) -> int:
     """Handle get-aliases command.
     
     Args:
-        files: List of files to process
+        files: List of FCStd files to process
+        
+    Returns:
+        Exit code (0 for success, 1 for error)
     """
-    aliases = get_cell_aliases_from_files(files)
-    if not aliases:
-        print("\nNo cell aliases found\n")
+    try:
+        aliases = get_cell_aliases_from_files(files)
+        if not aliases:
+            print("\nNo cell aliases found\n")
+            return 1
+        print("\nCell aliases found:\n")
+        for alias in sorted(aliases):
+            print(f"  {alias}")
+        return 0
+    except Exception as e:
+        logger.error(f"Error: {e}")
+        print(f"Error: {e}")
+        return 1
+
+
+def process_references(file_paths: List[Path], aliases: Optional[str] = None) -> Tuple[Dict[str, List[Reference]], Set[str]]:
+    """Process files and get references.
+    
+    Args:
+        file_paths: List of files to process
+        aliases: Optional comma-separated list of alias patterns
+        
+    Returns:
+        Tuple of (references dict, set of processed file names)
+    """
+    # Get references
+    references: Dict[str, List[Reference]] = {}
+    processed_files: Set[str] = set()
+
+    try:
+        references = get_references_from_files(file_paths)
+        if aliases:
+            patterns = [p.strip() for p in aliases.split(',')]
+            references = filter_references_by_patterns(references, patterns)
+
+        # Add all files that have references
+        for refs in references.values():
+            for ref in refs:
+                if ref.filename:
+                    processed_files.add(str(ref.filename))
+    except Exception as e:
+        logger.error(f"Error processing files: {e}")
+        raise
+
+    # Add empty files
+    for file_path in file_paths:
+        processed_files.add(str(file_path.name))
+    return references, processed_files
+
+
+def print_empty_files(processed_files: Set[str], references: Dict[str, List[Reference]]) -> None:
+    """Print list of files that have no references.
+    
+    Args:
+        processed_files: Set of all processed file names
+        references: Dictionary mapping alias names to lists of references
+        
+    Output format:
+        Files with no references:
+          <filename>
+          <filename>
+          ...
+    """
+    # Get files that have references
+    files_with_refs = {ref.filename for refs in references.values() for ref in refs if ref.filename is not None}
+    empty_files = [f for f in processed_files if f not in files_with_refs]
+    if empty_files:
+        print("\nEmpty files:")
+        for file in sorted(empty_files):
+            print(f"  {file}")
+
+
+def print_references(references: Dict[str, List[Reference]], output_format: str) -> None:
+    """Print references in the specified format.
+    
+    Args:
+        references: Dictionary of references to print
+        output_format: One of 'json', 'by_object', 'by_file', or 'by_alias'
+    """
+    if output_format == 'json':
+        print(convert_references_to_json(references))
         return
-    print("\nCell aliases found:\n")
-    for alias in sorted(aliases):
-        print(f"  {alias}")
+
+    print("\nAlias references found:\n")
+    if output_format == 'by_object':
+        print_references_by_object(references)
+    elif output_format == 'by_file':
+        print_references_by_file(references)
+    else:  # by_alias is default
+        print_references_by_alias(references)
 
 
 def handle_get_references(args: argparse.Namespace, file_paths: List[Path]) -> int:
@@ -279,34 +432,29 @@ def handle_get_references(args: argparse.Namespace, file_paths: List[Path]) -> i
         Exit code (0 for success)
     """
     try:
-        references = get_references_from_files(file_paths)
-
-        if args.aliases:
-            patterns = [p.strip() for p in args.aliases.split(',')]
-            references = filter_references_by_patterns(references, patterns)
+        references, processed_files = process_references(file_paths, args.aliases)
 
         if not references:
             if args.json:
-                print(convert_references_to_json({}))
+                print(json.dumps({"message": "No alias references found"}))
             else:
                 print("No alias references found")
+                print("\nProcessed files:")
+                for file in sorted(processed_files):
+                    print(f"  {file}")
             return 0
 
-        if args.json:
-            print(convert_references_to_json(references))
-            return 0
+        # Determine output format
+        output_format = 'json' if args.json else ('by_object' if args.by_object else ('by_file' if args.by_file else 'by_alias'))
+        print_references(references, output_format)
 
-        print("\nAlias references found:\n")
-        if args.by_object:
-            print_references_by_object(references)
-        elif args.by_file:
-            print_references_by_file(references)
-        else:  # by_alias is default
-            print_references_by_alias(references)
+        if not args.json:
+            print_empty_files(processed_files, references)
 
         return 0
     except Exception as e:
-        logger.error(f"Error in handle_get_references: {e}")
+        logger.error(f"Error: {e}")
+        print(f"Error: {e}")
         return 1
 
 
@@ -334,10 +482,13 @@ def main(args=None) -> int:
             handle_get_aliases(file_paths)
         elif parsed_args.command in ['get-references', 'get-expressions']:
             return handle_get_references(parsed_args, file_paths)
-        
+        else:
+            logger.error(f"Unknown command: {parsed_args.command}")
+            return 1
         return 0
     except Exception as e:
         logger.error(f"Error: {e}")
+        print(f"Error: {e}")
         return 1
 
 

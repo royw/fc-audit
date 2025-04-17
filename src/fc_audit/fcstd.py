@@ -2,12 +2,11 @@
 import html
 import logging
 import re
-import xml.etree.ElementTree
 import xml.etree.ElementTree as etree
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Set, Union, Optional
+from typing import Dict, List, Optional, Set, Tuple
 
 
 def is_fcstd_file(filepath: Path) -> bool:
@@ -88,12 +87,19 @@ def get_cell_aliases(filepath: Path) -> Set[str]:
 def _find_parent_with_identifier(element: etree.Element, root: etree.Element) -> tuple[etree.Element | None, str]:
     """Find the nearest ancestor with an identifying attribute and its context string.
     
+    An identifying attribute is one of:
+    - name: The name of the object or element
+    - type: The type of the object or element
+    - label: A human-readable label for the object
+    
     Args:
         element: Element to find parent for
         root: Root element of the XML tree
         
     Returns:
         Tuple of (parent element or None, context string)
+        The context string is formatted as 'Tag[identifier]' where identifier
+        is the value of the first identifying attribute found (name, type, or label)
     """
     for ancestor in root.findall(".//*"):
         for child in ancestor.findall(".//*"):
@@ -156,7 +162,15 @@ def get_expressions(filepath: Path) -> Dict[str, str]:
 
 @dataclass
 class Reference:
-    """A reference to a spreadsheet cell."""
+    """A reference to a spreadsheet cell in a FreeCAD document.
+    
+    Attributes:
+        object_name: Name of the object containing the reference
+        expression: The full expression string containing the reference
+        filename: Optional name of the file containing the reference
+        spreadsheet: Optional name of the spreadsheet containing the referenced cell
+        alias: The alias name of the referenced cell (empty if not found)
+    """
     object_name: str
     expression: str
     filename: Optional[str] = None
@@ -184,37 +198,95 @@ def parse_reference(expr: str) -> Optional[str]:
     return None
 
 
-def _parse_document_references(content: str, filename: str) -> Dict[str, List[Reference]]:
-    """Parse XML content to extract references.
+def _parse_expression_element(expr_elem: etree.Element, obj_name: str, filename: str) -> Optional[Tuple[str, Reference]]:
+    """Parse an Expression element and create a Reference if it contains an alias.
     
     Args:
-        content: XML content as string
-        filename: Name of the file being parsed
+        expr_elem: Expression element from XML containing an 'expression' attribute
+        obj_name: Name of the parent Object containing this expression
+        filename: Name of the FCStd file being parsed
         
     Returns:
-        Dictionary mapping alias names to list of references
+        If the expression contains a valid alias reference:
+            A tuple of (alias_name, Reference)
+            where Reference contains the full context of the reference
+        If no valid alias reference is found:
+            None
     """
-    references: Dict[str, List[Reference]] = {}
-    root = etree.fromstring(content)
+    try:
+        expr = html.unescape(expr_elem.attrib["expression"])
+        alias = parse_reference(expr)
+        if alias:
+            ref = Reference(
+                object_name=obj_name,
+                expression=expr,
+                filename=filename
+            )
+            return alias, ref
+    except KeyError:
+        logging.warning(f"Expression element missing 'expression' attribute in {filename}")
+    except Exception as e:
+        logging.warning(f"Error parsing expression in {filename}: {e}")
+    return None
+
+
+def _parse_object_element(obj: etree.Element, filename: str) -> List[Tuple[str, Reference]]:
+    """Parse an Object element and extract all references from its expressions.
     
-    # Find all Expression elements with expression attributes
-    for obj in root.findall(".//Object[@name]"):
+    Args:
+        obj: Object element from XML that may contain Expression elements
+        filename: Name of the FCStd file being parsed
+        
+    Returns:
+        List of (alias, Reference) tuples for each valid alias reference found
+        in any Expression elements within this Object. Returns an empty list
+        if no valid references are found or if the Object has no name attribute.
+    """
+    refs = []
+    try:
         obj_name = obj.attrib["name"]
         for expr_elem in obj.findall(".//Expression[@expression]"):
-            expr = html.unescape(expr_elem.attrib["expression"])
-            alias = parse_reference(expr)
-            if alias:
-                ref = Reference(
-                    object_name=obj_name,
-                    expression=expr,
-                    filename=filename
-                )
+            result = _parse_expression_element(expr_elem, obj_name, filename)
+            if result:
+                refs.append(result)
+    except KeyError:
+        logging.warning(f"Object element missing 'name' attribute in {filename}")
+    except Exception as e:
+        logging.warning(f"Error parsing object in {filename}: {e}")
+    return refs
+
+
+def _parse_document_references(content: str, filename: str) -> Dict[str, List[Reference]]:
+    """Parse XML content to extract all alias references from a Document.
+    
+    Args:
+        content: XML content from Document.xml as a string
+        filename: Name of the FCStd file being parsed
+        
+    Returns:
+        Dictionary mapping alias names to lists of Reference objects.
+        Each Reference object contains the full context of where and how
+        the alias is referenced. Returns an empty dict if the content
+        is not valid XML or contains no valid references.
+    """
+    references: Dict[str, List[Reference]] = {}
+    try:
+        root = etree.fromstring(content)
+        
+        # Find all Expression elements with expression attributes
+        for obj in root.findall(".//Object[@name]"):
+            for alias, ref in _parse_object_element(obj, filename):
                 if alias not in references:
                     references[alias] = []
                 references[alias].append(ref)
+                
+        if not references:
+            logging.info(f"No alias references found in {filename}")
+    except etree.ParseError as e:
+        logging.error(f"Failed to parse XML content from {filename}: {e}")
+    except Exception as e:
+        logging.error(f"Unexpected error parsing {filename}: {e}")
     
-    if not references:
-        logging.info("No alias references found")
     return references
 
 
