@@ -50,6 +50,11 @@ dev = [
     "pytest-mock>=3.12.0",
     "pytest-mypy>=0.10.3",
     "tox>=4.25.0",
+    "pre-commit>=3.6.0",
+    "mkdocs>=1.5.0",
+    "mkdocs-material>=9.5.0",
+    "mkdocstrings>=0.24.0",
+    "mkdocstrings-python>=1.8.0",
 ]
 
 [build-system]
@@ -100,7 +105,7 @@ testpaths = [
 [tool.tox]
 legacy_tox_ini = """
 [tox]
-env_list = 
+env_list =
     py{310,311,312}
     lint
     type

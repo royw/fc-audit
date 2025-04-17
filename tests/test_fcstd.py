@@ -1,17 +1,24 @@
 """Tests for the FreeCAD document handling module."""
+
 import pytest
 import zipfile
 from fc_audit.fcstd import (
-    get_expressions, get_references, Reference, parse_reference,
-    get_document_properties, get_cell_aliases, get_references_from_files,
-    get_cell_aliases_from_files, get_properties_from_files
+    get_expressions,
+    get_references,
+    Reference,
+    parse_reference,
+    get_document_properties,
+    get_cell_aliases,
+    get_references_from_files,
+    get_cell_aliases_from_files,
+    get_properties_from_files,
 )
 
 
 @pytest.fixture
 def sample_xml():
     """Sample XML data for testing."""
-    return '''<?xml version='1.0' encoding='utf-8'?>
+    return """<?xml version='1.0' encoding='utf-8'?>
 <Document SchemaVersion="4">
     <Object name="Spreadsheet">
         <Properties>
@@ -36,18 +43,18 @@ def sample_xml():
     <Object name="Sketch">
         <Expression expression="=&lt;&lt;globals&gt;&gt;#&lt;&lt;params&gt;&gt;.Length * 2"/>
     </Object>
-</Document>'''
+</Document>"""
 
 
 @pytest.fixture
 def mock_fcstd(tmp_path, sample_xml):
     """Create a mock FCStd file for testing."""
     test_file = tmp_path / "test.FCStd"
-    
+
     # Create a zip file (FCStd is a zip file)
-    with zipfile.ZipFile(test_file, 'w') as zf:
-        zf.writestr('Document.xml', sample_xml)
-    
+    with zipfile.ZipFile(test_file, "w") as zf:
+        zf.writestr("Document.xml", sample_xml)
+
     return test_file
 
 
@@ -80,8 +87,8 @@ def test_get_expressions(mock_fcstd):
 
     expressions = get_expressions(mock_fcstd)
     assert len(expressions) == 2
-    assert expressions['Object[Pad]'] == '=<<globals>>#<<params>>.Height + 10'
-    assert expressions['Object[Sketch]'] == '=<<globals>>#<<params>>.Length * 2'
+    assert expressions["Object[Pad]"] == "=<<globals>>#<<params>>.Height + 10"
+    assert expressions["Object[Sketch]"] == "=<<globals>>#<<params>>.Length * 2"
 
 
 def test_parse_document_references(sample_xml):
@@ -91,9 +98,9 @@ def test_parse_document_references(sample_xml):
     2. Each reference contains the correct object name and expression
     3. Multiple references to the same alias are properly handled"""
     from fc_audit.fcstd import _parse_document_references
-    
+
     references = _parse_document_references(sample_xml, "test.FCStd")
-    
+
     # Check Height reference
     assert "Height" in references
     assert len(references["Height"]) == 1
@@ -116,11 +123,11 @@ def test_get_references(mock_fcstd):
     2. XML content is correctly extracted and parsed
     3. References are returned with correct file information"""
     references = get_references(mock_fcstd)
-    
+
     # Verify we got the expected references
     assert "Height" in references
     assert "Length" in references
-    
+
     # Verify file information is correct
     for alias in references:
         for ref in references[alias]:
@@ -132,7 +139,11 @@ def test_reference_class():
     Verifies that a Reference object correctly stores and provides access to
     its filename, object_name, and expression attributes."""
 
-    ref = Reference(filename="test.FCStd", object_name="Pad", expression="<<globals>>#<<params>>.Height + 10")
+    ref = Reference(
+        filename="test.FCStd",
+        object_name="Pad",
+        expression="<<globals>>#<<params>>.Height + 10",
+    )
     assert ref.filename == "test.FCStd"
     assert ref.object_name == "Pad"
     assert ref.expression == "<<globals>>#<<params>>.Height + 10"
@@ -144,12 +155,12 @@ def test_get_document_properties(mock_fcstd):
     1. Properties are correctly extracted
     2. Invalid files are rejected
     3. Duplicate properties are handled"""
-    
+
     # Test valid file
     properties = get_document_properties(mock_fcstd)
     assert "cells" in properties
     assert "alias" in properties
-    
+
     # Test invalid file
     with pytest.raises(ValueError):
         get_document_properties(mock_fcstd.parent / "nonexistent.FCStd")
@@ -161,11 +172,11 @@ def test_get_cell_aliases(mock_fcstd):
     1. Aliases are correctly extracted
     2. Invalid files are rejected
     3. Files without aliases are handled"""
-    
+
     # Test valid file
     aliases = get_cell_aliases(mock_fcstd)
     assert "Length" in aliases
-    
+
     # Test invalid file
     with pytest.raises(ValueError):
         get_cell_aliases(mock_fcstd.parent / "nonexistent.FCStd")
@@ -177,16 +188,16 @@ def test_get_expressions_error_handling(mock_fcstd):
     1. Invalid files are rejected
     2. XML parsing errors are handled
     3. Missing Document.xml is handled"""
-    
+
     # Test invalid file
     with pytest.raises(ValueError):
         get_expressions(mock_fcstd.parent / "nonexistent.FCStd")
-    
+
     # Test corrupted XML
     bad_xml_file = mock_fcstd.parent / "bad.FCStd"
-    with zipfile.ZipFile(bad_xml_file, 'w') as zf:
-        zf.writestr('Document.xml', 'Invalid XML content')
-    
+    with zipfile.ZipFile(bad_xml_file, "w") as zf:
+        zf.writestr("Document.xml", "Invalid XML content")
+
     with pytest.raises(Exception):
         get_expressions(bad_xml_file)
 
@@ -197,18 +208,15 @@ def test_get_references_from_files_error_handling(mock_fcstd):
     1. Invalid files are skipped
     2. Valid references are still returned
     3. Empty list is handled"""
-    
+
     # Test mix of valid and invalid files
-    files = [
-        mock_fcstd,
-        mock_fcstd.parent / "nonexistent.FCStd"
-    ]
+    files = [mock_fcstd, mock_fcstd.parent / "nonexistent.FCStd"]
     references = get_references_from_files(files)
-    
+
     # Should still get references from valid file
     assert "Height" in references
     assert "Length" in references
-    
+
     # Test empty list
     assert get_references_from_files([]) == {}
 
@@ -219,17 +227,14 @@ def test_get_cell_aliases_from_files_error_handling(mock_fcstd):
     1. Invalid files are skipped
     2. Valid aliases are still returned
     3. Empty list is handled"""
-    
+
     # Test mix of valid and invalid files
-    files = [
-        mock_fcstd,
-        mock_fcstd.parent / "nonexistent.FCStd"
-    ]
+    files = [mock_fcstd, mock_fcstd.parent / "nonexistent.FCStd"]
     aliases = get_cell_aliases_from_files(files)
-    
+
     # Should still get aliases from valid file
     assert "Length" in aliases
-    
+
     # Test empty list
     assert get_cell_aliases_from_files([]) == set()
 
@@ -240,18 +245,15 @@ def test_get_properties_from_files_error_handling(mock_fcstd):
     1. Invalid files are skipped
     2. Valid properties are still returned
     3. Empty list is handled"""
-    
+
     # Test mix of valid and invalid files
-    files = [
-        mock_fcstd,
-        mock_fcstd.parent / "nonexistent.FCStd"
-    ]
+    files = [mock_fcstd, mock_fcstd.parent / "nonexistent.FCStd"]
     properties = get_properties_from_files(files)
-    
+
     # Should still get properties from valid file
     assert "cells" in properties
     assert "alias" in properties
-    
+
     # Test empty list
     assert get_properties_from_files([]) == set()
 
@@ -264,15 +266,15 @@ def test_parse_expression_element_error_handling():
     3. Invalid reference formats are handled"""
     from fc_audit.fcstd import _parse_expression_element
     from xml.etree.ElementTree import Element
-    
+
     # Test invalid expression attribute
-    expr_elem = Element('Expression')
-    expr_elem.attrib['expression'] = 'invalid expression'
-    assert _parse_expression_element(expr_elem, 'obj', 'test.FCStd') is None
-    
+    expr_elem = Element("Expression")
+    expr_elem.attrib["expression"] = "invalid expression"
+    assert _parse_expression_element(expr_elem, "obj", "test.FCStd") is None
+
     # Test missing expression attribute
-    expr_elem = Element('Expression')
-    assert _parse_expression_element(expr_elem, 'obj', 'test.FCStd') is None
+    expr_elem = Element("Expression")
+    assert _parse_expression_element(expr_elem, "obj", "test.FCStd") is None
 
 
 def test_parse_object_element_error_handling():
@@ -283,18 +285,18 @@ def test_parse_object_element_error_handling():
     3. Invalid expressions are handled"""
     from fc_audit.fcstd import _parse_object_element
     from xml.etree.ElementTree import Element
-    
+
     # Test missing object name
-    obj = Element('Object')
-    assert _parse_object_element(obj, 'test.FCStd') == []
-    
+    obj = Element("Object")
+    assert _parse_object_element(obj, "test.FCStd") == []
+
     # Test invalid expressions
-    obj = Element('Object')
-    obj.attrib['name'] = 'TestObj'
-    expr = Element('Expression')
-    expr.attrib['expression'] = 'invalid expression'
+    obj = Element("Object")
+    obj.attrib["name"] = "TestObj"
+    expr = Element("Expression")
+    expr.attrib["expression"] = "invalid expression"
     obj.append(expr)
-    assert _parse_object_element(obj, 'test.FCStd') == []
+    assert _parse_object_element(obj, "test.FCStd") == []
 
 
 def test_parse_document_references_error_handling():
@@ -304,21 +306,21 @@ def test_parse_document_references_error_handling():
     2. Missing object elements are handled
     3. Invalid object elements are handled"""
     from fc_audit.fcstd import _parse_document_references
-    
+
     # Test invalid XML content
-    assert _parse_document_references('invalid xml', 'test.FCStd') == {}
-    
+    assert _parse_document_references("invalid xml", "test.FCStd") == {}
+
     # Test empty document
-    assert _parse_document_references('<Document></Document>', 'test.FCStd') == {}
-    
+    assert _parse_document_references("<Document></Document>", "test.FCStd") == {}
+
     # Test document with invalid objects
-    xml = '''<?xml version='1.0' encoding='utf-8'?>
+    xml = """<?xml version='1.0' encoding='utf-8'?>
     <Document>
         <Object name="Test">
             <Expression expression="invalid"/>
         </Object>
-    </Document>'''
-    assert _parse_document_references(xml, 'test.FCStd') == {}
+    </Document>"""
+    assert _parse_document_references(xml, "test.FCStd") == {}
 
 
 def test_deep_xml_error_handling(tmp_path):
@@ -328,33 +330,33 @@ def test_deep_xml_error_handling(tmp_path):
     2. Missing required attributes are handled
     3. Invalid expression formats are handled"""
     from fc_audit.fcstd import get_expressions
-    
+
     # Create a test file with invalid XML structure
     test_file = tmp_path / "test.FCStd"
-    with zipfile.ZipFile(test_file, 'w') as zf:
+    with zipfile.ZipFile(test_file, "w") as zf:
         # Test case 1: XML with missing required attributes
-        xml1 = '''<?xml version='1.0' encoding='utf-8'?>
+        xml1 = """<?xml version='1.0' encoding='utf-8'?>
         <Document>
             <Object>
                 <Expression/>
             </Object>
-        </Document>'''
-        zf.writestr('Document.xml', xml1)
-    
+        </Document>"""
+        zf.writestr("Document.xml", xml1)
+
     # Should handle missing attributes gracefully
     result = get_expressions(test_file)
     assert result == {}
-    
+
     # Test case 2: XML with invalid expression format
-    with zipfile.ZipFile(test_file, 'w') as zf:
-        xml2 = '''<?xml version='1.0' encoding='utf-8'?>
+    with zipfile.ZipFile(test_file, "w") as zf:
+        xml2 = """<?xml version='1.0' encoding='utf-8'?>
         <Document>
             <Object name="Test">
                 <Expression expression="=NotAValidExpression"/>
             </Object>
-        </Document>'''
-        zf.writestr('Document.xml', xml2)
-    
+        </Document>"""
+        zf.writestr("Document.xml", xml2)
+
     # Should still capture the expression even if it's invalid
     result = get_expressions(test_file)
-    assert result == {'Object[Test]': '=NotAValidExpression'}
+    assert result == {"Object[Test]": "=NotAValidExpression"}
