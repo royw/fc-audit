@@ -15,20 +15,10 @@ This is particularly useful for:
 
 ## Installation
 
-```bash
-# Create and activate virtual environment
-uv venv
-source .venv/bin/activate
-
-# Install for development
-uv pip install -e ".[dev]"
-
-# Or install for use
-uv pip install .
-```
+TBD
 
 Requirements:
-- Python 3.7 or higher
+- Python 3.10 or higher
 - FreeCAD documents in FCStd format
 
 ## Usage
@@ -135,6 +125,22 @@ fc-audit --help
 
 ## Development
 
+### Setup
+
+This example uses uv, but you can use any other tool you prefer.
+
+```bash
+# Create and activate virtual environment
+uv venv
+source .venv/bin/activate
+
+# Install for development
+uv pip install -e ".[dev]"
+
+# Or install for use
+uv pip install .
+```
+
 ### Testing
 ```bash
 # Run tests with coverage
@@ -142,7 +148,12 @@ pytest --cov=src.fc_audit
 
 # Run tests verbosely
 pytest -v
+
+tox
+
+uvx --python 3.11 tox
 ```
+
 
 Current test coverage:
 - Overall: 89%
