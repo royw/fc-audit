@@ -1,0 +1,133 @@
+# Taskfile for fc-audit project
+# https://taskfile.dev
+#
+# This Taskfile provides a comprehensive set of development tasks:
+#
+# Development Setup:
+# - task setup: Set up development environment (venv, deps, pre-commit)
+# - task clean: Clean build artifacts and caches
+#
+# Testing:
+# - task test: Run pytest (accepts CLI args)
+# - task test:coverage: Run tests with coverage report (min 85% coverage)
+#
+# Code Quality:
+# - task lint: Run all code quality checks
+# - task lint:ruff: Run ruff linter
+# - task lint:mypy: Run type checks
+# - task format: Format code with ruff
+# - task hooks: Run pre-commit hooks
+#
+# Documentation:
+# - task docs: Serve documentation locally
+# - task docs:build: Build documentation
+#
+# Build:
+# - task build: Build package distribution
+# - task build:wheel: Build wheel distribution
+# - task build:sdist: Build source distribution
+#
+# CI/CD:
+# - task ci: Run all CI checks (lint, test, docs)
+
+version: '3'
+
+vars:
+  PYTHON: python3
+  COVERAGE_MIN: 85
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list-all
+    silent: true
+
+  setup:
+    desc: Set up development environment
+    cmds:
+      - uv venv
+      - uv pip install -e ".[dev]"
+      - pre-commit install
+
+  test:
+    desc: Run tests with pytest
+    cmds:
+      - uv run pytest {{.CLI_ARGS}}
+
+  test:coverage:
+    desc: Run tests with coverage report
+    cmds:
+      - uv run pytest --cov --cov-report=term-missing
+      - python -c "import sys; exit(1) if float('{{.COVERAGE_MIN}}') > float('$(uv run coverage report | grep TOTAL | awk '{print $4}' | tr -d '%')') else exit(0)"
+
+  lint:
+    desc: Run code quality checks
+    cmds:
+      - task: lint:ruff
+      - task: lint:mypy
+
+  lint:ruff:
+    desc: Run ruff linter
+    cmds:
+      - uv run ruff check src tests
+
+  lint:mypy:
+    desc: Run type checks
+    cmds:
+      - uv run mypy src tests
+
+  format:
+    desc: Format code with ruff
+    cmds:
+      - uv run ruff format src tests
+
+  hooks:
+    desc: Run pre-commit hooks
+    cmds:
+      - uv run pre-commit run --all-files
+
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - rm -rf build dist .eggs *.egg-info
+      - find . -type d -name __pycache__ -exec rm -rf {} +
+      - find . -type d -name .pytest_cache -exec rm -rf {} +
+      - find . -type d -name .ruff_cache -exec rm -rf {} +
+      - find . -type d -name .mypy_cache -exec rm -rf {} +
+      - find . -type f -name .coverage -delete
+      - find . -type d -name htmlcov -exec rm -rf {} +
+
+  docs:
+    desc: Serve documentation locally
+    cmds:
+      - uv run mkdocs serve
+
+  docs:build:
+    desc: Build documentation
+    cmds:
+      - uv run mkdocs build
+
+  build:wheel:
+    desc: Build wheel distribution
+    cmds:
+      - uv run python -m build --wheel
+
+  build:sdist:
+    desc: Build source distribution
+    cmds:
+      - uv run python -m build --sdist
+
+  build:
+    desc: Build package distribution
+    cmds:
+      - task: build:wheel
+      - task: build:sdist
+
+  ci:
+    desc: Run all CI checks
+    cmds:
+      - task: lint
+      - task: test:coverage
+      - task: docs:build
+      - task: build

@@ -1,22 +1,25 @@
 """Command line interface for fc-audit."""
 
+from __future__ import annotations
+
 import argparse
 import fnmatch
 import json
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
-from loguru import logger  # type: ignore
+
+from loguru import logger
 
 from .fcstd import (
-    get_properties_from_files,
-    get_cell_aliases_from_files,
-    get_references_from_files,
     Reference,
+    get_cell_aliases_from_files,
+    get_properties_from_files,
+    get_references_from_files,
 )
 
 
-def setup_logging(log_file: Optional[str] = None, verbose: bool = False) -> None:
+def setup_logging(log_file: str | None = None, verbose: bool = False) -> None:
     """Configure logging settings.
 
     Args:
@@ -35,51 +38,49 @@ def setup_logging(log_file: Optional[str] = None, verbose: bool = False) -> None
         logger.add(log_file, rotation="10 MB")
 
 
-def parse_args(args: list[str] | None = None) -> argparse.Namespace:
+def parse_args(args: Sequence[str | Path]) -> argparse.Namespace:
     """Parse command line arguments.
 
+    Args:
+        args: Optional list of command line arguments
+
     Returns:
-        Parsed command line arguments
+        Parsed arguments
     """
     parser = argparse.ArgumentParser(description="FreeCAD document analysis tool")
     parser.add_argument(
-        "-v", "--verbose", action="store_true", help="Enable verbose logging"
+        "--log-file",
+        type=str,
+        help="Path to log file (default: stderr)",
     )
-    parser.add_argument("--log-file", help="Path to log file")
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Enable verbose output",
+    )
 
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    # Create subparsers for each command
+    subparsers = parser.add_subparsers(
+        dest="command",
+        required=True,
+    )
 
     # get-properties command
-    get_props = subparsers.add_parser(
-        "get-properties", help="Extract unique property names from FreeCAD documents"
-    )
-    get_props.add_argument(
-        "files", nargs="+", type=str, help="One or more FCStd files to analyze"
-    )
+    get_props = subparsers.add_parser("get-properties", help="Extract unique property names from FreeCAD documents")
+    get_props.add_argument("files", nargs="+", type=str, help="One or more FCStd files to analyze")
 
     # get-aliases command
-    get_aliases = subparsers.add_parser(
-        "get-aliases", help="Extract cell aliases from FreeCAD documents"
-    )
-    get_aliases.add_argument(
-        "files", nargs="+", type=str, help="One or more FCStd files to analyze"
-    )
+    get_aliases = subparsers.add_parser("get-aliases", help="Extract cell aliases from FreeCAD documents")
+    get_aliases.add_argument("files", nargs="+", type=str, help="One or more FCStd files to analyze")
 
     # get-expressions command
-    get_exprs = subparsers.add_parser(
-        "get-expressions", help="Extract expressions from FreeCAD documents"
-    )
-    get_exprs.add_argument(
-        "files", nargs="+", type=str, help="One or more FCStd files to analyze"
-    )
+    get_exprs = subparsers.add_parser("get-expressions", help="Extract expressions from FreeCAD documents")
+    get_exprs.add_argument("files", nargs="+", type=str, help="One or more FCStd files to analyze")
 
     # get-references command
-    get_refs = subparsers.add_parser(
-        "get-references", help="Extract alias references from FreeCAD documents"
-    )
-    get_refs.add_argument(
-        "files", nargs="+", type=str, help="One or more FCStd files to analyze"
-    )
+    get_refs = subparsers.add_parser("get-references", help="Extract alias references from FreeCAD documents")
+    get_refs.add_argument("files", nargs="+", type=str, help="One or more FCStd files to analyze")
     get_refs.add_argument(
         "--aliases",
         type=str,
@@ -94,22 +95,20 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
         default=True,
         help="Group output by alias (default)",
     )
-    format_group.add_argument(
-        "--by-object", action="store_true", help="Group output by file and object"
-    )
-    format_group.add_argument(
-        "--by-file", action="store_true", help="Group output by file and alias"
-    )
-    format_group.add_argument(
-        "--json", action="store_true", help="Output in JSON format"
-    )
+    format_group.add_argument("--by-object", action="store_true", help="Group output by file and object")
+    format_group.add_argument("--by-file", action="store_true", help="Group output by file and alias")
+    format_group.add_argument("--json", action="store_true", help="Output in JSON format")
 
-    return parser.parse_args(args)
+    parsed_args = parser.parse_args([str(a) for a in args])
+    # Convert file paths to Path objects
+    if hasattr(parsed_args, "files"):
+        parsed_args.files = [Path(f) for f in parsed_args.files]
+    return parsed_args
 
 
 def format_by_object(
-    references: Dict[str, List[Reference]],
-) -> Dict[str, Dict[str, Dict[str, List[Reference]]]]:
+    references: dict[str, list[Reference]],
+) -> dict[str, dict[str, dict[str, list[Reference]]]]:
     """Format references grouped by file and object.
 
     Args:
@@ -128,7 +127,7 @@ def format_by_object(
     """
     if not references:
         return {}
-    by_file_obj: Dict[str, Dict[str, Dict[str, List[Reference]]]] = {}
+    by_file_obj: dict[str, dict[str, dict[str, list[Reference]]]] = {}
     for alias, refs in references.items():
         for ref in refs:
             if ref.filename is not None:
@@ -143,8 +142,8 @@ def format_by_object(
 
 
 def format_by_file(
-    references: Dict[str, List[Reference]],
-) -> Dict[str, Dict[str, List[Reference]]]:
+    references: dict[str, list[Reference]],
+) -> dict[str, dict[str, list[Reference]]]:
     """Format references grouped by file and alias.
 
     Args:
@@ -161,7 +160,7 @@ def format_by_file(
     """
     if not references:
         return {}
-    by_file: Dict[str, Dict[str, List[Reference]]] = {}
+    by_file: dict[str, dict[str, list[Reference]]] = {}
     for alias, refs in references.items():
         for ref in refs:
             if ref.filename is not None:
@@ -174,8 +173,8 @@ def format_by_file(
 
 
 def filter_references_by_patterns(
-    references: Dict[str, List[Reference]], patterns: List[str]
-) -> Dict[str, List[Reference]]:
+    references: dict[str, list[Reference]], patterns: list[str]
+) -> dict[str, list[Reference]]:
     """Filter references by alias patterns.
 
     Args:
@@ -190,15 +189,15 @@ def filter_references_by_patterns(
         return references
 
     filtered_refs = {}
-    for alias in references.keys():
+    for alias, refs in references.items():
         for pattern in patterns:
             if pattern and fnmatch.fnmatch(alias, pattern):
-                filtered_refs[alias] = references[alias]
+                filtered_refs[alias] = refs
                 break
     return filtered_refs
 
 
-def convert_references_to_json(references: Dict[str, List[Reference]]) -> str:
+def convert_references_to_json(references: dict[str, list[Reference]]) -> str:
     """Convert references to JSON format.
 
     Args:
@@ -225,7 +224,7 @@ def convert_references_to_json(references: Dict[str, List[Reference]]) -> str:
     return json.dumps(json_data, indent=2)
 
 
-def print_references_by_object(references: Dict[str, List[Reference]]) -> None:
+def print_references_by_object(references: dict[str, list[Reference]]) -> None:
     """Print references grouped by object name.
 
     Args:
@@ -246,7 +245,7 @@ def print_references_by_object(references: Dict[str, List[Reference]]) -> None:
     print("Alias references found:")
 
     # Reorganize references by object name
-    by_object: Dict[str, List[Reference]] = {}
+    by_object: dict[str, list[Reference]] = {}
     for refs in references.values():
         for ref in refs:
             if ref.object_name not in by_object:
@@ -263,7 +262,7 @@ def print_references_by_object(references: Dict[str, List[Reference]]) -> None:
             print()
 
 
-def print_references_by_file(references: Dict[str, List[Reference]]) -> None:
+def print_references_by_file(references: dict[str, list[Reference]]) -> None:
     """Print references grouped by file and alias.
 
     Args:
@@ -294,7 +293,7 @@ def print_references_by_file(references: Dict[str, List[Reference]]) -> None:
                 print(f"      Expression: {ref.expression}")
 
 
-def print_references_by_alias(references: Dict[str, List[Reference]]) -> None:
+def print_references_by_alias(references: dict[str, list[Reference]]) -> None:
     """Print references grouped by alias name.
 
     Args:
@@ -323,7 +322,7 @@ def print_references_by_alias(references: Dict[str, List[Reference]]) -> None:
             print()
 
 
-def handle_get_properties(files: List[Path]) -> int:
+def handle_get_properties(files: list[Path]) -> int:
     """Handle get-properties command.
 
     Args:
@@ -347,7 +346,7 @@ def handle_get_properties(files: List[Path]) -> int:
         return 1
 
 
-def handle_get_aliases(files: List[Path]) -> int:
+def handle_get_aliases(files: list[Path]) -> int:
     """Handle get-aliases command.
 
     Args:
@@ -372,8 +371,8 @@ def handle_get_aliases(files: List[Path]) -> int:
 
 
 def process_references(
-    file_paths: List[Path], aliases: Optional[str] = None
-) -> Tuple[Dict[str, List[Reference]], Set[str]]:
+    file_paths: list[Path], aliases: str | None = None
+) -> tuple[dict[str, list[Reference]], set[str]]:
     """Process files and get references.
 
     Args:
@@ -384,8 +383,8 @@ def process_references(
         Tuple of (references dict, set of processed file names)
     """
     # Get references
-    references: Dict[str, List[Reference]] = {}
-    processed_files: Set[str] = set()
+    references: dict[str, list[Reference]] = {}
+    processed_files: set[str] = set()
 
     try:
         references = get_references_from_files(file_paths)
@@ -408,9 +407,7 @@ def process_references(
     return references, processed_files
 
 
-def print_empty_files(
-    processed_files: Set[str], references: Dict[str, List[Reference]]
-) -> None:
+def print_empty_files(processed_files: set[str], references: dict[str, list[Reference]]) -> None:
     """Print list of files that have no references.
 
     Args:
@@ -424,12 +421,7 @@ def print_empty_files(
           ...
     """
     # Get files that have references
-    files_with_refs = {
-        ref.filename
-        for refs in references.values()
-        for ref in refs
-        if ref.filename is not None
-    }
+    files_with_refs = {ref.filename for refs in references.values() for ref in refs if ref.filename is not None}
     empty_files = [f for f in processed_files if f not in files_with_refs]
     if empty_files:
         print("\nEmpty files:")
@@ -437,9 +429,7 @@ def print_empty_files(
             print(f"  {file}")
 
 
-def print_references(
-    references: Dict[str, List[Reference]], output_format: str
-) -> None:
+def print_references(references: dict[str, list[Reference]], output_format: str) -> None:
     """Print references in the specified format.
 
     Args:
@@ -459,7 +449,7 @@ def print_references(
         print_references_by_alias(references)
 
 
-def handle_get_references(args: argparse.Namespace, file_paths: List[Path]) -> int:
+def handle_get_references(args: argparse.Namespace, file_paths: list[Path]) -> int:
     """Handle get-references and get-expressions commands.
 
     Args:
@@ -484,13 +474,7 @@ def handle_get_references(args: argparse.Namespace, file_paths: List[Path]) -> i
 
         # Determine output format
         output_format = (
-            "json"
-            if args.json
-            else (
-                "by_object"
-                if args.by_object
-                else ("by_file" if args.by_file else "by_alias")
-            )
+            "json" if args.json else ("by_object" if args.by_object else ("by_file" if args.by_file else "by_alias"))
         )
         print_references(references, output_format)
 
@@ -504,7 +488,7 @@ def handle_get_references(args: argparse.Namespace, file_paths: List[Path]) -> i
         return 1
 
 
-def main(args: list[str] | None = None) -> int:
+def main(args: Sequence[str] | None = None) -> int:
     """Main entry point for the application.
 
     Args:
@@ -514,13 +498,14 @@ def main(args: list[str] | None = None) -> int:
         Exit code (0 for success, non-zero for error)
     """
     try:
-        parsed_args = parse_args(args)
+        parsed_args = parse_args(args or [])
         setup_logging(parsed_args.log_file, parsed_args.verbose)
 
         logger.info("Starting fc-audit")
 
         # Convert file paths to Path objects
         file_paths = [Path(f) for f in parsed_args.files]
+        logger.debug(f"File paths: {file_paths}")
 
         if parsed_args.command == "get-properties":
             handle_get_properties(file_paths)

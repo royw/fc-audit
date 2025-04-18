@@ -1,10 +1,22 @@
+# SPDX-FileCopyrightText: 2024 Roy Wright
+#
+# SPDX-License-Identifier: MIT
+
+# ref: https://packaging.python.org/en/latest/specifications/pyproject-toml
+
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
 [project]
 name = "fc-audit"
 version = "0.1.0"
 description = "Command line audit tool"
 readme = "README.md"
 
-requires-python = ">=3.10"
+requires-python = ">=3.11"
+
+license = {file = "LICENSES/MIT.txt"}
 
 authors = [
   {name = "Roy Wright", email = "roy@wright.org"}
@@ -14,7 +26,6 @@ maintainers = [
   {name = "Roy Wright", email = "roy@wright.org"}
 ]
 
-license = {file = "LICENSES/MIT.txt"}
 
 keywords = ["python", "CLI", "FreeCAD"]
 
@@ -30,6 +41,15 @@ classifiers = [
   "Topic :: Multimedia :: Graphics :: 3D Modeling"
 ]
 
+urls = {"fc-audit" = "https://github.com/royw/fc-audit"}
+
+# Specifies which keys listed by this PEP were intentionally unspecified so another tool can/will provide
+# such metadata dynamically. This clearly delineates which metadata is purposefully unspecified and expected
+# to stay unspecified compared to being provided via tooling later on.
+#
+# more: https://packaging.python.org/en/latest/specifications/pyproject-toml/#dynamic
+dynamic = []
+
 # There are three tables related to entry points. The [project.scripts] table corresponds to the
 # console_scripts group in the entry points specification. The key of the table is the name of the entry
 # point and the value is the object reference.
@@ -37,29 +57,29 @@ scripts = {'fc-audit' = "fc_audit.__main__:main"}
 
 dependencies = [
     "loguru>=0.7.2",
+#    "loguru-mypy>=0.0.4",
     "lxml>=5.1.0",
-    "mypy>=1.15.0",
-    "radon>=6.0.1",
-    "ruff>=0.11.5",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0.0",
-    "pytest-cov>=4.1.0",
-    "pytest-mock>=3.12.0",
-    "pytest-mypy>=0.10.3",
-    "tox>=4.25.0",
-    "pre-commit>=3.6.0",
-    "mkdocs>=1.5.0",
-    "mkdocs-material>=9.5.0",
-    "mkdocstrings>=0.24.0",
-    "mkdocstrings-python>=1.8.0",
+  "pytest>=8.0.0",
+  "pytest-cov>=4.1.0",
+  "pytest-mock>=3.12.0",
+  "pytest-mypy>=0.10.3",
+  "tox>=4.25.0",
+  "pre-commit>=3.6.0",
+  "lxml-stubs>=0.5.1",
+  "mkdocs>=1.5.0",
+  "mkdocs-material>=9.5.0",
+  "mkdocstrings>=0.24.0",
+  "mkdocstrings-python>=1.8.0",
+  "build>=1.1.0",
+  "mypy>=1.15.0",
+  "radon>=6.0.1",
+  "ruff>=0.11.5",
+  "version-bumper<0.2.0,>=0.1.1",
 ]
-
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
 
 [tool.coverage.run]
 source_pkgs = ["fc_audit"]
@@ -141,6 +161,124 @@ deps =
 commands =
     mypy --namespace-packages src tests
 """
+
+### mypy config
+
+[tool.mypy]
+#plugins = ["loguru_mypy"]
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+ignore_missing_imports = true
+
+### ruff linter/formatter: https://docs.astral.sh/ruff/settings
+
+[tool.ruff]
+# Allow imports relative to the "src" and "tests" directories.
+src = ["src", "tests"]
+# In addition to the standard set of exclusions, omit these.
+extend-exclude = [".tox", "dist", "docs", "metrics", "scripts", "site"]
+# Set the maximum line length to 119.
+line-length = 119
+# fix lint issues.
+fix = true
+# Enumerate all fixed violations.
+show-fixes = true
+
+[tool.ruff.format]
+# Enable reformatting of code snippets in docstrings.
+docstring-code-format = true
+
+
+[tool.ruff.lint]
+# Add the `line-too-long` rule to the enforced rule set. By default, Ruff omits rules that
+# overlap with the use of a formatter, like Black, but we can override this behavior by
+# explicitly adding the rule.
+# https://docs.astral.sh/ruff/rules
+# extend-select = ["E501"]
+extend-select = [
+  #"F",        # pyflakes
+  #"E",        # pycodestyle Error
+  #"W",        # pycodestyle Warning
+  "C901",     # mccade
+  "I",        # isort
+  "N",        # pep8-naming
+  #"D",        # pydocstyle
+  "UP",       # pyupgrade
+  "YTT",      # flake8-2020
+  #"ANN",      # flake8-annotations
+  #"ASYNC",    # flake8-async
+  #"S",        # flake8-bandit
+  #"BLE",      # flake8-blind-except
+  #"FBT",      # flake8-boolean-trap
+  "B",        # flake8-bugbear
+  #"A",        # flake8-builtins
+  #"COM",      # flake8-commas
+  #"CPY",      # flake8-copyright
+  "C4",       # flake8-comprehensions
+  #"DTZ",      # flake8-datetimez
+  #"T10",      # flake8-debugger
+  #"DJ",       # flake8-django
+  "EM",       # flake8-errmsg
+  "EXE",      # flake8-executable
+  #"FA",       # flake8-future-annotations
+  #"ICS",      # flake8-implicit-str-concat
+  "ICN",      # flake8-import-conventions
+  "LOG",      # flake8-logging (added 7/4/24)
+  "G",        # flake8-logging-format
+  "INP",      # flake8-no-pep420 (added 7/4/24)
+  "PIE",      # flake8-pie
+  "T20",      # flake8-print
+  #"PYI",      # flake8-pyi
+  "PT",       # flake8-pytest-style
+  #"Q",        # flake8-quotes
+  #"RSE",      # flake8-raise
+  "RET",      # flake8-return
+  #"SLF",      # flake8-self
+  #"SLOT",     # flake8-slot
+  "SIM",      # flake8-simplify
+  #"TID",      # flake8-tidy
+  #"TCH",      # flake8-type-checking
+  #"INT",      # flake8-gettest
+  "ARG",      # flake8-unused-arguments
+  "PTH",      # flake8-use-pathlib
+  #"TD",       # flake8-todos
+  #"FIX",      # flake8-fixme
+  #"ERA",      # eradicate
+  "PD",       # pandas-vet
+  "PGH",      # pygrep-hooks
+  "PL",       # pylint
+  #"TRY",      # tryceratops
+  #"FLY",      # flynt
+  "NPY",      # NumPy specific rules
+  #"AIR",      # airflow
+  #"PERF",     # perflint
+  #"FURB",     # refurb
+  "RUF",      # Ruff-specific
+]
+ignore = [
+  "PLR09",    # Too many <...>
+  "PLR2004",  # Magic value used in comparison
+  "ISC001",   # Conflicts with formatter
+  "S101",     # pytest uses "assert" so allow it
+  "N817",     # CamelCase imports
+]
+isort.required-imports = ["from __future__ import annotations"]
+# Uncomment if using a _compat.typing backport
+# typing-modules = ["scientific python._compat.typing"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["T20"]
+"noxfile.py" = ["T20"]
+"src/fc_audit/cli.py" = ["T201"]  # Allow print statements in CLI
 
 [tool.hatch.build]
 packages = ["src/fc_audit"]

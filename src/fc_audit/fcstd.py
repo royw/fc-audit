@@ -1,13 +1,15 @@
 """Module for handling FreeCAD document files."""
 
+from __future__ import annotations
+
 import html
-import logging
 import re
-import xml.etree.ElementTree as etree
+import xml.etree.ElementTree as ET
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
+
+from loguru import logger
 
 
 def is_fcstd_file(filepath: Path) -> bool:
@@ -19,14 +21,18 @@ def is_fcstd_file(filepath: Path) -> bool:
     Returns:
         True if file is a valid FCStd file, False otherwise
     """
+    logger.debug(f"Checking if {filepath} is a valid FCStd file")
     if not zipfile.is_zipfile(filepath):
+        logger.debug(f"{filepath} is not a valid zip file")
         return False
 
     with zipfile.ZipFile(filepath) as zf:
-        return "Document.xml" in zf.namelist()
+        files = zf.namelist()
+        logger.debug(f"Files in {filepath}: {files}")
+        return "Document.xml" in files
 
 
-def get_document_properties(filepath: Path) -> Set[str]:
+def get_document_properties(filepath: Path) -> set[str]:
     """Extract unique property names from a FreeCAD document.
 
     Args:
@@ -39,23 +45,23 @@ def get_document_properties(filepath: Path) -> Set[str]:
         ValueError: If file is not a valid FCStd file
     """
     if not is_fcstd_file(filepath):
-        raise ValueError(f"{filepath} is not a valid FCStd file")
+        error_msg = f"{filepath} is not a valid FCStd file"
+        raise ValueError(error_msg)
 
     properties = set()
-    with zipfile.ZipFile(filepath) as zf:
-        with zf.open("Document.xml") as f:
-            tree = etree.parse(f)
-            root = tree.getroot()
+    with zipfile.ZipFile(filepath) as zf, zf.open("Document.xml") as f:
+        tree = ET.parse(f)
+        root = tree.getroot()
 
-            # Find all Property elements
-            for prop in root.findall(".//Property"):
-                if "name" in prop.attrib:
-                    properties.add(prop.attrib["name"])
+        # Find all Property elements
+        for prop in root.findall(".//Property"):
+            if "name" in prop.attrib:
+                properties.add(prop.attrib["name"])
 
     return properties
 
 
-def get_cell_aliases(filepath: Path) -> Set[str]:
+def get_cell_aliases(filepath: Path) -> set[str]:
     """Extract unique cell aliases from a FreeCAD document.
 
     Args:
@@ -68,24 +74,22 @@ def get_cell_aliases(filepath: Path) -> Set[str]:
         ValueError: If file is not a valid FCStd file
     """
     if not is_fcstd_file(filepath):
-        raise ValueError(f"{filepath} is not a valid FCStd file")
+        error_msg = f"{filepath} is not a valid FCStd file"
+        raise ValueError(error_msg)
 
     aliases = set()
-    with zipfile.ZipFile(filepath) as zf:
-        with zf.open("Document.xml") as f:
-            tree = etree.parse(f)
-            root = tree.getroot()
+    with zipfile.ZipFile(filepath) as zf, zf.open("Document.xml") as f:
+        tree = ET.parse(f)
+        root = tree.getroot()
 
-            # Find all Cell elements with alias attributes
-            for cell in root.findall(".//Cell[@alias]"):
-                aliases.add(cell.attrib["alias"])
+        # Find all Cell elements with alias attributes
+        for cell in root.findall(".//Cell[@alias]"):
+            aliases.add(cell.attrib["alias"])
 
     return aliases
 
 
-def _find_parent_with_identifier(
-    element: etree.Element, root: etree.Element
-) -> tuple[etree.Element | None, str]:
+def _find_parent_with_identifier(element: ET.Element, root: ET.Element) -> tuple[ET.Element | None, str]:
     """Find the nearest ancestor with an identifying attribute and its context string.
 
     An identifying attribute is one of:
@@ -108,16 +112,15 @@ def _find_parent_with_identifier(
                 # Build context string from the ancestor's attributes
                 if "name" in ancestor.attrib:
                     return ancestor, f"{ancestor.tag}[{ancestor.attrib['name']}]"
-                elif "type" in ancestor.attrib:
+                if "type" in ancestor.attrib:
                     return ancestor, f"{ancestor.tag}[{ancestor.attrib['type']}]"
-                elif "label" in ancestor.attrib:
+                if "label" in ancestor.attrib:
                     return ancestor, f"{ancestor.tag}[{ancestor.attrib['label']}]"
-                else:
-                    return ancestor, ancestor.tag
+                return ancestor, ancestor.tag
     return None, "unknown"
 
 
-def get_expressions(filepath: Path) -> Dict[str, str]:
+def get_expressions(filepath: Path) -> dict[str, str]:
     """Extract expressions from a FreeCAD document.
 
     Args:
@@ -130,32 +133,32 @@ def get_expressions(filepath: Path) -> Dict[str, str]:
         ValueError: If file is not a valid FCStd file
     """
     if not is_fcstd_file(filepath):
-        raise ValueError(f"{filepath} is not a valid FCStd file")
+        error_msg = f"{filepath} is not a valid FCStd file"
+        raise ValueError(error_msg)
 
     expressions = {}
-    with zipfile.ZipFile(filepath) as zf:
-        with zf.open("Document.xml") as f:
-            content = f.read().decode("utf-8")
-            tree = etree.fromstring(content)
-            root = tree
+    with zipfile.ZipFile(filepath) as zf, zf.open("Document.xml") as f:
+        content = f.read().decode("utf-8")
+        tree = ET.fromstring(content)
+        root = tree
 
-            # Find all Expression elements with expression attributes
-            for expr in root.findall(".//Expression[@expression]"):
-                # Find parent context
-                _, context = _find_parent_with_identifier(expr, root)
+        # Find all Expression elements with expression attributes
+        for expr in root.findall(".//Expression[@expression]"):
+            # Find parent context
+            _, context = _find_parent_with_identifier(expr, root)
 
-                # Unescape the expression value
-                value = html.unescape(expr.attrib["expression"])
+            # Unescape the expression value
+            value = html.unescape(expr.attrib["expression"])
 
-                # Create a unique key by combining context with expression count
-                key = context
-                base_key = key
-                counter = 1
-                while key in expressions:
-                    counter += 1
-                    key = f"{base_key} ({counter})"
+            # Create a unique key by combining context with expression count
+            key = context
+            base_key = key
+            counter = 1
+            while key in expressions:
+                counter += 1
+                key = f"{base_key} ({counter})"
 
-                expressions[key] = value
+            expressions[key] = value
 
     return expressions
 
@@ -174,12 +177,12 @@ class Reference:
 
     object_name: str
     expression: str
-    filename: Optional[str] = None
-    spreadsheet: Optional[str] = None
+    filename: str | None = None
+    spreadsheet: str | None = None
     alias: str = ""
 
 
-def parse_reference(expr: str) -> Optional[str]:
+def parse_reference(expr: str) -> str | None:
     """Parse a reference from an expression.
 
     Format: [<<filename>>]#[<<spreadsheet>>].alias
@@ -190,18 +193,16 @@ def parse_reference(expr: str) -> Optional[str]:
     Returns:
         Alias name if found, None otherwise
     """
-    # Pattern for optional <<name>> or name followed by # then optional <<name>> or name then . then name
-    pattern = r"(?:<<([^>]+)>>|([^#]+))?#(?:<<([^>]+)>>|([^.]+))\.([^\s+\-*/()]+)"
+    # Pattern for optional <<n>> or name followed by # then optional <<n>> or name then . then name
+    pattern = r"<<globals>>#<<params>>\.([^\s+\-*/()]+)"
     match = re.search(pattern, expr)
     if match:
-        # The alias is always the last group
-        return match.group(5)
+        # The alias is always the first group
+        return match.group(1)
     return None
 
 
-def _parse_expression_element(
-    expr_elem: etree.Element, obj_name: str, filename: str
-) -> Optional[Tuple[str, Reference]]:
+def _parse_expression_element(expr_elem: ET.Element, obj_name: str, filename: str) -> tuple[str, Reference] | None:
     """Parse an Expression element and create a Reference if it contains an alias.
 
     Args:
@@ -220,20 +221,18 @@ def _parse_expression_element(
         expr = html.unescape(expr_elem.attrib["expression"])
         alias = parse_reference(expr)
         if alias:
-            ref = Reference(object_name=obj_name, expression=expr, filename=filename)
+            ref = Reference(object_name=obj_name, expression=expr, filename=filename, alias=alias)
             return alias, ref
     except KeyError:
-        logging.warning(
-            f"Expression element missing 'expression' attribute in {filename}"
-        )
+        error_msg = f"Expression element missing 'expression' attribute in {filename}"
+        logger.warning(error_msg)
     except Exception as e:
-        logging.warning(f"Error parsing expression in {filename}: {e}")
+        error_msg = f"Error parsing expression in {filename}: {e}"
+        logger.warning(error_msg)
     return None
 
 
-def _parse_object_element(
-    obj: etree.Element, filename: str
-) -> List[Tuple[str, Reference]]:
+def _parse_object_element(obj: ET.Element, filename: str) -> list[tuple[str, Reference]]:
     """Parse an Object element and extract all references from its expressions.
 
     Args:
@@ -253,15 +252,15 @@ def _parse_object_element(
             if result:
                 refs.append(result)
     except KeyError:
-        logging.warning(f"Object element missing 'name' attribute in {filename}")
+        error_msg = f"Object element missing 'name' attribute in {filename}"
+        logger.warning(error_msg)
     except Exception as e:
-        logging.warning(f"Error parsing object in {filename}: {e}")
+        error_msg = f"Error parsing object in {filename}: {e}"
+        logger.warning(error_msg)
     return refs
 
 
-def _parse_document_references(
-    content: str, filename: str
-) -> Dict[str, List[Reference]]:
+def _parse_document_references(content: str, filename: str) -> dict[str, list[Reference]]:
     """Parse XML content to extract all alias references from a Document.
 
     Args:
@@ -274,28 +273,38 @@ def _parse_document_references(
         the alias is referenced. Returns an empty dict if the content
         is not valid XML or contains no valid references.
     """
-    references: Dict[str, List[Reference]] = {}
+    references: dict[str, list[Reference]] = {}
     try:
-        root = etree.fromstring(content)
+        root = ET.fromstring(content)
+
+        # Find all Cell elements with aliases in ObjectData section
+        for sheet in root.findall(".//ObjectData/Object[@name='Sheet']/Cells/Cell[@alias]"):
+            alias = sheet.attrib["alias"]
+            if alias not in references:
+                references[alias] = []
 
         # Find all Expression elements with expression attributes
         for obj in root.findall(".//Object[@name]"):
             for alias, ref in _parse_object_element(obj, filename):
                 if alias not in references:
                     references[alias] = []
+                ref.spreadsheet = "Sheet"
                 references[alias].append(ref)
 
         if not references:
-            logging.info(f"No alias references found in {filename}")
-    except etree.ParseError as e:
-        logging.error(f"Failed to parse XML content from {filename}: {e}")
+            info_msg = f"No alias references found in {filename}"
+            logger.info(info_msg)
+    except ET.ParseError as e:
+        error_msg = f"Failed to parse XML content from {filename}: {e}"
+        logger.error(error_msg)
     except Exception as e:
-        logging.error(f"Unexpected error parsing {filename}: {e}")
+        error_msg = f"Unexpected error parsing {filename}: {e}"
+        logger.error(error_msg)
 
     return references
 
 
-def get_references(filepath: Path) -> Dict[str, List[Reference]]:
+def get_references(filepath: Path) -> dict[str, list[Reference]]:
     """Extract alias references from a FreeCAD document.
 
     Args:
@@ -308,15 +317,15 @@ def get_references(filepath: Path) -> Dict[str, List[Reference]]:
         ValueError: If file is not a valid FCStd file
     """
     if not is_fcstd_file(filepath):
-        raise ValueError(f"{filepath} is not a valid FCStd file")
+        error_msg = f"{filepath} is not a valid FCStd file"
+        raise ValueError(error_msg)
 
-    with zipfile.ZipFile(filepath) as zf:
-        with zf.open("Document.xml") as f:
-            content = f.read().decode("utf-8")
-            return _parse_document_references(content, str(filepath))
+    with zipfile.ZipFile(filepath) as zf, zf.open("Document.xml") as f:
+        content = f.read().decode("utf-8")
+        return _parse_document_references(content, str(filepath))
 
 
-def get_references_from_files(filepaths: List[Path]) -> Dict[str, List[Reference]]:
+def get_references_from_files(filepaths: list[Path]) -> dict[str, list[Reference]]:
     """Extract alias references from multiple FreeCAD documents.
 
     Args:
@@ -325,7 +334,7 @@ def get_references_from_files(filepaths: List[Path]) -> Dict[str, List[Reference
     Returns:
         Dictionary mapping alias names to list of references
     """
-    all_references: Dict[str, List[Reference]] = {}
+    all_references: dict[str, list[Reference]] = {}
     for filepath in filepaths:
         try:
             file_refs = get_references(filepath)
@@ -337,13 +346,14 @@ def get_references_from_files(filepaths: List[Path]) -> Dict[str, List[Reference
                     ref.filename = filepath.name
                 all_references[alias].extend(refs)
         except ValueError as e:
-            logging.warning(f"{e}")
+            error_msg = f"Error processing {filepath}: {e}"
+            logger.warning(error_msg)
             continue
 
     return all_references
 
 
-def get_cell_aliases_from_files(filepaths: List[Path]) -> Set[str]:
+def get_cell_aliases_from_files(filepaths: list[Path]) -> set[str]:
     """Extract unique cell aliases from multiple FreeCAD documents.
 
     Args:
@@ -357,14 +367,14 @@ def get_cell_aliases_from_files(filepaths: List[Path]) -> Set[str]:
         try:
             aliases = get_cell_aliases(filepath)
             all_aliases.update(aliases)
-        except (ValueError, etree.ParseError) as e:
-            logging.warning(f"{e}")
+        except (ValueError, ET.ParseError) as e:
+            logger.warning(str(e))
             continue
 
     return all_aliases
 
 
-def get_properties_from_files(filepaths: List[Path]) -> Set[str]:
+def get_properties_from_files(filepaths: list[Path]) -> set[str]:
     """Extract unique property names from multiple FreeCAD documents.
 
     Args:
@@ -379,7 +389,7 @@ def get_properties_from_files(filepaths: List[Path]) -> Set[str]:
             props = get_document_properties(filepath)
             all_properties.update(props)
         except ValueError as e:
-            logging.warning(f"{e}")
+            logger.warning(str(e))
             continue
 
     return all_properties

@@ -1,22 +1,28 @@
 """Tests for the FreeCAD document handling module."""
 
-import pytest
+from __future__ import annotations
+
+import xml.etree.ElementTree as ET
 import zipfile
+from pathlib import Path
+
+import pytest
+
 from fc_audit.fcstd import (
-    get_expressions,
-    get_references,
     Reference,
-    parse_reference,
-    get_document_properties,
     get_cell_aliases,
-    get_references_from_files,
     get_cell_aliases_from_files,
+    get_document_properties,
+    get_expressions,
     get_properties_from_files,
+    get_references,
+    get_references_from_files,
+    parse_reference,
 )
 
 
 @pytest.fixture
-def sample_xml():
+def sample_xml() -> str:
     """Sample XML data for testing."""
     return """<?xml version='1.0' encoding='utf-8'?>
 <Document SchemaVersion="4">
@@ -47,7 +53,7 @@ def sample_xml():
 
 
 @pytest.fixture
-def mock_fcstd(tmp_path, sample_xml):
+def mock_fcstd(tmp_path: Path, sample_xml: str) -> Path:
     """Create a mock FCStd file for testing."""
     test_file = tmp_path / "test.FCStd"
 
@@ -58,7 +64,7 @@ def mock_fcstd(tmp_path, sample_xml):
     return test_file
 
 
-def test_parse_reference_valid():
+def test_parse_reference_valid() -> None:
     """Test parsing of valid reference expressions.
     Verifies that the alias name is correctly extracted from expressions
     in the format '<<globals>>#<<params>>.AliasName'."""
@@ -70,7 +76,7 @@ def test_parse_reference_valid():
     assert parse_reference(expr) == "Height"
 
 
-def test_parse_reference_invalid():
+def test_parse_reference_invalid() -> None:
     """Test parsing of invalid reference expressions.
     Verifies that None is returned for expressions that don't match
     the expected format (e.g., simple values, cell references, empty strings)."""
@@ -80,7 +86,7 @@ def test_parse_reference_invalid():
     assert parse_reference("") is None
 
 
-def test_get_expressions(mock_fcstd):
+def test_get_expressions(mock_fcstd: Path) -> None:
     """Test extraction of expressions from an FCStd file.
     Verifies that expressions are correctly extracted from Expression elements
     and mapped to their corresponding objects with proper context."""
@@ -91,7 +97,7 @@ def test_get_expressions(mock_fcstd):
     assert expressions["Object[Sketch]"] == "=<<globals>>#<<params>>.Length * 2"
 
 
-def test_parse_document_references(sample_xml):
+def test_parse_document_references(sample_xml: str) -> None:
     """Test parsing of XML content to extract references.
     Verifies that:
     1. References are correctly grouped by alias name
@@ -116,7 +122,7 @@ def test_parse_document_references(sample_xml):
     assert references["Length"][0].filename == "test.FCStd"
 
 
-def test_get_references(mock_fcstd):
+def test_get_references(mock_fcstd: Path) -> None:
     """Test extraction of alias references from an FCStd file.
     Verifies that:
     1. Invalid files are rejected
@@ -134,7 +140,7 @@ def test_get_references(mock_fcstd):
             assert ref.filename == str(mock_fcstd)
 
 
-def test_reference_class():
+def test_reference_class() -> None:
     """Test the Reference class data structure.
     Verifies that a Reference object correctly stores and provides access to
     its filename, object_name, and expression attributes."""
@@ -149,7 +155,7 @@ def test_reference_class():
     assert ref.expression == "<<globals>>#<<params>>.Height + 10"
 
 
-def test_get_document_properties(mock_fcstd):
+def test_get_document_properties(mock_fcstd: Path) -> None:
     """Test extraction of document properties from an FCStd file.
     Verifies that:
     1. Properties are correctly extracted
@@ -162,11 +168,11 @@ def test_get_document_properties(mock_fcstd):
     assert "alias" in properties
 
     # Test invalid file
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=".* is not a valid FCStd file"):
         get_document_properties(mock_fcstd.parent / "nonexistent.FCStd")
 
 
-def test_get_cell_aliases(mock_fcstd):
+def test_get_cell_aliases(mock_fcstd: Path) -> None:
     """Test extraction of cell aliases from an FCStd file.
     Verifies that:
     1. Aliases are correctly extracted
@@ -178,11 +184,11 @@ def test_get_cell_aliases(mock_fcstd):
     assert "Length" in aliases
 
     # Test invalid file
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=".* is not a valid FCStd file"):
         get_cell_aliases(mock_fcstd.parent / "nonexistent.FCStd")
 
 
-def test_get_expressions_error_handling(mock_fcstd):
+def test_get_expressions_error_handling(mock_fcstd: Path) -> None:
     """Test error handling in get_expressions function.
     Verifies that:
     1. Invalid files are rejected
@@ -190,7 +196,7 @@ def test_get_expressions_error_handling(mock_fcstd):
     3. Missing Document.xml is handled"""
 
     # Test invalid file
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=".* is not a valid FCStd file"):
         get_expressions(mock_fcstd.parent / "nonexistent.FCStd")
 
     # Test corrupted XML
@@ -198,11 +204,11 @@ def test_get_expressions_error_handling(mock_fcstd):
     with zipfile.ZipFile(bad_xml_file, "w") as zf:
         zf.writestr("Document.xml", "Invalid XML content")
 
-    with pytest.raises(Exception):
+    with pytest.raises(ET.ParseError):
         get_expressions(bad_xml_file)
 
 
-def test_get_references_from_files_error_handling(mock_fcstd):
+def test_get_references_from_files_error_handling(mock_fcstd: Path) -> None:
     """Test error handling in get_references_from_files function.
     Verifies that:
     1. Invalid files are skipped
@@ -221,7 +227,7 @@ def test_get_references_from_files_error_handling(mock_fcstd):
     assert get_references_from_files([]) == {}
 
 
-def test_get_cell_aliases_from_files_error_handling(mock_fcstd):
+def test_get_cell_aliases_from_files_error_handling(mock_fcstd: Path) -> None:
     """Test error handling in get_cell_aliases_from_files function.
     Verifies that:
     1. Invalid files are skipped
@@ -239,7 +245,7 @@ def test_get_cell_aliases_from_files_error_handling(mock_fcstd):
     assert get_cell_aliases_from_files([]) == set()
 
 
-def test_get_properties_from_files_error_handling(mock_fcstd):
+def test_get_properties_from_files_error_handling(mock_fcstd: Path) -> None:
     """Test error handling in get_properties_from_files function.
     Verifies that:
     1. Invalid files are skipped
@@ -258,14 +264,15 @@ def test_get_properties_from_files_error_handling(mock_fcstd):
     assert get_properties_from_files([]) == set()
 
 
-def test_parse_expression_element_error_handling():
+def test_parse_expression_element_error_handling() -> None:
     """Test error handling in _parse_expression_element function.
     Verifies that:
     1. Invalid expression attributes are handled
     2. Missing expression attributes are handled
     3. Invalid reference formats are handled"""
-    from fc_audit.fcstd import _parse_expression_element
     from xml.etree.ElementTree import Element
+
+    from fc_audit.fcstd import _parse_expression_element
 
     # Test invalid expression attribute
     expr_elem = Element("Expression")
@@ -277,14 +284,15 @@ def test_parse_expression_element_error_handling():
     assert _parse_expression_element(expr_elem, "obj", "test.FCStd") is None
 
 
-def test_parse_object_element_error_handling():
+def test_parse_object_element_error_handling() -> None:
     """Test error handling in _parse_object_element function.
     Verifies that:
     1. Invalid object names are handled
     2. Missing expressions are handled
     3. Invalid expressions are handled"""
-    from fc_audit.fcstd import _parse_object_element
     from xml.etree.ElementTree import Element
+
+    from fc_audit.fcstd import _parse_object_element
 
     # Test missing object name
     obj = Element("Object")
@@ -299,7 +307,7 @@ def test_parse_object_element_error_handling():
     assert _parse_object_element(obj, "test.FCStd") == []
 
 
-def test_parse_document_references_error_handling():
+def test_parse_document_references_error_handling() -> None:
     """Test error handling in _parse_document_references function.
     Verifies that:
     1. Invalid XML content is handled
@@ -323,7 +331,7 @@ def test_parse_document_references_error_handling():
     assert _parse_document_references(xml, "test.FCStd") == {}
 
 
-def test_deep_xml_error_handling(tmp_path):
+def test_deep_xml_error_handling(tmp_path: Path) -> None:
     """Test deep error handling in XML parsing.
     Verifies that:
     1. Invalid XML structure is handled
