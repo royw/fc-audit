@@ -71,6 +71,28 @@ def create_fcstd_file(filepath: Path, xml_content: str) -> None:
         zf.writestr("Document.xml", xml_content)
 
 
+def test_extract_expression() -> None:
+    from fc_audit.fcstd import ExpressionError, _extract_expression
+
+    # Success case: Expression attached to parent with name attribute
+    root = ET.Element("Document")
+    parent = ET.SubElement(root, "Object", name="ParentName")
+    expr = ET.SubElement(parent, "Expression", expression="=<<globals>>#<<params>>.Length + 10")
+    ctx, value = _extract_expression(expr, root)
+    assert ctx.startswith("Object[ParentName]")
+    assert value == "=<<globals>>#<<params>>.Length + 10"
+
+    # Error case: Expression not attached to parent with identifier
+    expr2 = ET.Element("Expression", expression="=<<globals>>#<<params>>.Height")
+    with pytest.raises(ExpressionError):
+        _extract_expression(expr2, root)
+
+    # Error case: Missing 'expression' attribute
+    expr3 = ET.SubElement(parent, "Expression")
+    with pytest.raises(ExpressionError, match="expression"):
+        _extract_expression(expr3, root)
+
+
 def test_parse_reference_valid() -> None:
     """Test parsing of valid reference expressions.
     Verifies that the alias name is correctly extracted from expressions

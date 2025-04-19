@@ -56,7 +56,7 @@ def parse_args(argv: Sequence[str | Path] | None = None) -> argparse.Namespace:
     Returns:
         Parsed arguments
     """
-    parser = argparse.ArgumentParser(description="Analyze FreeCAD documents for cell references")
+    parser = argparse.ArgumentParser(prog="fc-audit", description="Analyze FreeCAD documents for cell references")
     parser.add_argument(
         "--log-file",
         type=str,
@@ -68,14 +68,14 @@ def parse_args(argv: Sequence[str | Path] | None = None) -> argparse.Namespace:
         help="Enable verbose output",
     )
 
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers = parser.add_subparsers(dest="command", required=True, description="Commands")
 
-    # get-references command
-    get_refs = subparsers.add_parser("get-references", help="Get cell references from FreeCAD documents")
-    get_refs.add_argument("files", nargs="+", type=Path, help="FreeCAD document files to analyze")
+    # references command
+    references_parser = subparsers.add_parser("references", help="Show cell references from FreeCAD documents")
+    references_parser.add_argument("files", nargs="+", type=Path, help="FreeCAD document files to analyze")
 
     # Format options
-    format_group = get_refs.add_mutually_exclusive_group()
+    format_group = references_parser.add_mutually_exclusive_group()
     format_group.add_argument(
         "--by-alias",
         action="store_true",
@@ -98,19 +98,19 @@ def parse_args(argv: Sequence[str | Path] | None = None) -> argparse.Namespace:
     )
 
     # Filter options
-    get_refs.add_argument(
+    references_parser.add_argument(
         "--aliases",
         help="Filter aliases by pattern (e.g. 'Length*' or '*Width')",
     )
 
-    # get-properties command
-    get_props = subparsers.add_parser("get-properties", help="Get document properties from FreeCAD documents")
-    get_props.add_argument("files", nargs="+", type=Path, help="FreeCAD document files to analyze")
+    # properties command
+    properties_parser = subparsers.add_parser("properties", help="Show document properties from FreeCAD documents")
+    properties_parser.add_argument("files", nargs="+", type=Path, help="FreeCAD document files to analyze")
 
-    # get-aliases command
-    get_aliases = subparsers.add_parser("get-aliases", help="Get cell aliases from FreeCAD documents")
-    get_aliases.add_argument("files", nargs="+", type=Path, help="FreeCAD document files to analyze")
-    get_aliases.add_argument(
+    # aliases command
+    aliases_parser = subparsers.add_parser("aliases", help="Show cell aliases from FreeCAD documents")
+    aliases_parser.add_argument("files", nargs="+", type=Path, help="FreeCAD document files to analyze")
+    aliases_parser.add_argument(
         "--aliases",
         type=str,
         help="Comma-separated list of aliases to show (default: show all)",
@@ -119,7 +119,7 @@ def parse_args(argv: Sequence[str | Path] | None = None) -> argparse.Namespace:
     args = parser.parse_args([str(a) for a in (argv or [])])
 
     # Set by-alias as default if no format option is specified
-    if args.command == "get-references" and not any(
+    if args.command == "references" and not any(
         [
             getattr(args, "by_alias", False),
             getattr(args, "by_object", False),
@@ -364,29 +364,32 @@ def _print_by_object_format(by_object: dict[str, dict[str, dict[str, list[Refere
 
 
 def _print_by_file_format(by_file: dict[str, dict[str, list[Reference]]]) -> None:
-    """Print references grouped by file.
-
-    Args:
-        by_file: References formatted by file
-    """
-    for filename, aliases in by_file.items():
+    """Print references grouped by file, sorted by file, alias, then object."""
+    for filename in sorted(by_file):
+        aliases = by_file[filename]
         print(f"\nFile: {filename}")
-        for alias, refs in aliases.items():
+        for alias in sorted(aliases):
+            refs = aliases[alias]
             print(f"  Alias: {alias}")
-            for ref in refs:
+            # Sort refs by object_name
+            for ref in sorted(refs, key=lambda r: (str(r.object_name) if r.object_name is not None else "")):
                 print(f"    Object: {ref.object_name}")
                 print(f"    Expression: {ref.expression}")
 
 
 def _print_by_alias_format(references: dict[str, list[Reference]]) -> None:
-    """Print references grouped by alias.
-
-    Args:
-        references: Dictionary mapping alias names to lists of references
-    """
-    for alias, refs in references.items():
+    """Print references grouped by alias, sorted by alias, file, then object name."""
+    for alias in sorted(references):
+        refs = references[alias]
         print(f"\nAlias: {alias}")
-        for ref in refs:
+        # Sort refs by filename, then object_name
+        for ref in sorted(
+            refs,
+            key=lambda r: (
+                str(r.filename) if r.filename is not None else "",
+                str(r.object_name) if r.object_name is not None else "",
+            ),
+        ):
             print(f"  File: {ref.filename}")
             print(f"  Object: {ref.object_name}")
             print(f"  Expression: {ref.expression}")
@@ -446,16 +449,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         Exit code (0 for success, non-zero for error)
     """
     try:
-        args = parse_args(argv or [])
-        setup_logging(log_file=args.log_file, verbose=args.verbose)
+        argv = argv or sys.argv[1:]
+        args = parse_args(argv)
 
-        logger.info("Starting fc-audit")
+        # Configure logging
+        setup_logging(getattr(args, "log_file", None), getattr(args, "verbose", False))
 
-        if args.command == "get-properties":
+        if args.command == "properties":
             return handle_get_properties(args)
-        if args.command == "get-aliases":
+        if args.command == "aliases":
             return handle_get_aliases(args)
-        if args.command == "get-references":
+        if args.command == "references":
             return handle_get_references(args)
         logger.error(f"Unknown command: {args.command}")
         return 1
@@ -465,4 +469,4 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    sys.exit(main())
