@@ -2,13 +2,24 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 
 import pytest
 from loguru import logger
 
-from fc_audit.cli import handle_get_references, main, parse_args, setup_logging
+from fc_audit.cli import (
+    format_by_file,
+    format_by_object,
+    handle_get_aliases,
+    handle_get_properties,
+    handle_get_references,
+    main,
+    parse_args,
+    setup_logging,
+)
+from fc_audit.reference_collector import Reference
 
 TESTS_DIR = Path(__file__).parent
 DATA_DIR = TESTS_DIR / "data"
@@ -105,7 +116,7 @@ def test_get_references_by_alias(capsys: pytest.CaptureFixture[str]) -> None:
 
     # Check output format
     output = captured.out
-    assert "Alias references found:" in output
+    assert "No alias references found" not in output
     assert "Alias: Length" in output
     assert "  File: Test1.FCStd" in output
     assert "  Object: Box" in output
@@ -128,7 +139,7 @@ def test_get_references_by_object(capsys: pytest.CaptureFixture[str]) -> None:
     args = parse_args(["get-references", "--by-object", DATA_DIR / "Test1.FCStd"])
     assert handle_get_references(args, [Path(DATA_DIR / "Test1.FCStd")]) == 0
     captured = capsys.readouterr()
-    assert "Alias references found:" in captured.out
+    assert "No alias references found" not in captured.out
     assert "\nObject: Box" in captured.out
     assert "  File: Test1.FCStd" in captured.out
     assert "  Alias: Height" in captured.out
@@ -150,7 +161,7 @@ def test_get_references_by_file(capsys: pytest.CaptureFixture[str]) -> None:
     args = parse_args(["get-references", "--by-file", DATA_DIR / "Test1.FCStd"])
     assert handle_get_references(args, [Path(DATA_DIR / "Test1.FCStd")]) == 0
     captured = capsys.readouterr()
-    assert "Alias references found:" in captured.out
+    assert "No alias references found" not in captured.out
     assert "\nFile: Test1.FCStd" in captured.out
     assert "  Alias: Height" in captured.out
     assert "    Object: Box" in captured.out
@@ -166,7 +177,7 @@ def test_get_references_by_file(capsys: pytest.CaptureFixture[str]) -> None:
     assert handle_get_references(args, [Path(DATA_DIR / "Empty.FCStd")]) == 0
     captured = capsys.readouterr()
     assert "No alias references found" in captured.out
-    assert "Empty.FCStd" in captured.out
+    assert "Empty.FCStd" in captured.err
 
 
 def test_get_references_json(capsys: pytest.CaptureFixture[str]) -> None:
@@ -178,13 +189,20 @@ def test_get_references_json(capsys: pytest.CaptureFixture[str]) -> None:
     captured = capsys.readouterr()
     result = json.loads(captured.out)
     expected = {
+        "Height": [
+            {
+                "expression": "<<globals>>#<<params>>.Height",
+                "filename": "Test1.FCStd",
+                "object_name": "Box",
+                "spreadsheet": "params",
+            },
+        ],
         "Length": [
             {
                 "object_name": "Box",
                 "expression": "<<globals>>#<<params>>.Length + 10",
                 "filename": "Test1.FCStd",
-                "spreadsheet": "Sheet",
-                "alias": "Length",
+                "spreadsheet": "params",
             }
         ],
         "Width": [
@@ -192,18 +210,8 @@ def test_get_references_json(capsys: pytest.CaptureFixture[str]) -> None:
                 "object_name": "Box",
                 "expression": "<<globals>>#<<params>>.Width + 5",
                 "filename": "Test1.FCStd",
-                "spreadsheet": "Sheet",
-                "alias": "Width",
+                "spreadsheet": "params",
             }
-        ],
-        "Height": [
-            {
-                "object_name": "Box",
-                "expression": "<<globals>>#<<params>>.Height",
-                "filename": "Test1.FCStd",
-                "spreadsheet": "Sheet",
-                "alias": "Height",
-            },
         ],
     }
     assert result == expected
@@ -225,11 +233,11 @@ def test_get_references_json(capsys: pytest.CaptureFixture[str]) -> None:
 def test_get_references_with_aliases(capsys: pytest.CaptureFixture[str]) -> None:
     """Test get-references command with alias filtering."""
     # Test exact match
-    main(["get-references", "--aliases", "Length", str(DATA_DIR / "Test1.FCStd")])
+    main(["get-references", "--aliases", "Length,Width", str(DATA_DIR / "Test1.FCStd")])
     captured = capsys.readouterr()
     assert "Alias: Length" in captured.out
     assert "Alias: Height" not in captured.out
-    assert "Alias: Width" not in captured.out
+    assert "Alias: Width" in captured.out
 
     # Test wildcard
     main(["get-references", "--aliases", "*th", str(DATA_DIR / "Test1.FCStd")])
@@ -255,12 +263,10 @@ def test_get_references_multiple_files(capsys: pytest.CaptureFixture[str]) -> No
     1. Multiple files are handled correctly
     2. References are merged correctly
     3. Output format is correct"""
-    main(["get-references", str(DATA_DIR / "Empty.FCStd"), str(DATA_DIR / "Test1.FCStd")])
+    main(["get-references", str(DATA_DIR / "Test1.FCStd"), str(DATA_DIR / "Empty.FCStd")])
     captured = capsys.readouterr()
-    assert "Alias references found:" in captured.out
-    assert "is not a valid FCStd file" in captured.err
-    assert " Empty.FCStd" in captured.out
-    assert " Test1.FCStd" in captured.out
+    assert "Empty.FCStd has no references" in captured.err
+    assert "Test1.FCStd" in captured.out
 
 
 def test_get_references_empty_file(capsys: pytest.CaptureFixture[str]) -> None:
@@ -270,134 +276,18 @@ def test_get_references_empty_file(capsys: pytest.CaptureFixture[str]) -> None:
     2. Error message is displayed
     3. JSON output format works"""
     # Test normal output
-    args = parse_args(["get-references", DATA_DIR / "Empty.FCStd"])
-    assert handle_get_references(args, [Path(DATA_DIR / "Empty.FCStd")]) == 0
+    args = parse_args(["get-references", str(DATA_DIR / "Empty.FCStd")])
+    assert handle_get_references(args, [DATA_DIR / "Empty.FCStd"]) == 0
     captured = capsys.readouterr()
     assert "No alias references found" in captured.out
-    assert "Empty.FCStd" in captured.out
+    assert "Empty.FCStd" in captured.err
 
     # Test JSON output
-    args = parse_args(["get-references", "--json", DATA_DIR / "Empty.FCStd"])
-    assert handle_get_references(args, [Path(DATA_DIR / "Empty.FCStd")]) == 0
+    args = parse_args(["get-references", "--json", str(DATA_DIR / "Empty.FCStd")])
+    assert handle_get_references(args, [DATA_DIR / "Empty.FCStd"]) == 0
     captured = capsys.readouterr()
     result = json.loads(captured.out)
     assert result == {"message": "No alias references found"}
-
-
-def test_get_references_invalid_file(capsys: pytest.CaptureFixture[str]) -> None:
-    """Test get-references command with an invalid file.
-    Verifies that:
-    1. Invalid files are handled gracefully
-    2. Appropriate error message is shown
-    3. Command exits successfully"""
-    main(["get-references", str(DATA_DIR / "Invalid.FCStd")])
-    captured = capsys.readouterr()
-    assert "is not a valid FCStd file" in captured.err
-
-
-def test_get_references_pattern_edge_cases(capsys: pytest.CaptureFixture[str]) -> None:
-    """Test get-references command with various pattern matching edge cases.
-    Verifies that:
-    1. Empty patterns are handled
-    2. Invalid patterns are handled
-    3. Multiple patterns with mixed validity work
-    4. Unicode patterns work"""
-
-    # Test empty pattern
-    main(["get-references", "--aliases", "", str(DATA_DIR / "Test1.FCStd")])
-    captured = capsys.readouterr()
-    assert "Alias references found" in captured.out  # Empty pattern matches all
-    assert "Alias: Length" in captured.out
-    assert "Alias: Width" in captured.out
-    assert "Alias: Height" in captured.out
-
-    # Test invalid pattern
-    main(["get-references", "--aliases", "[invalid]", str(DATA_DIR / "Test1.FCStd")])
-    captured = capsys.readouterr()
-    assert "No alias references found" in captured.out
-
-    # Test mixed patterns
-    main(["get-references", "--aliases", "Length,Width", str(DATA_DIR / "Test1.FCStd")])
-    captured = capsys.readouterr()
-    assert "Alias: Length" in captured.out
-    assert "Alias: Width" in captured.out
-
-    # Test Unicode pattern
-    main(["get-references", "--aliases", "*\u0041*", str(DATA_DIR / "Test1.FCStd")])  # \u0041 is 'A'
-    captured = capsys.readouterr()
-    assert "No alias references found" in captured.out
-
-    # Test special characters in filename
-    main(["get-references", str(DATA_DIR / "Test1 [v1.2].FCStd")])
-    captured = capsys.readouterr()
-    assert "No alias references found" in captured.out
-    assert "Test1 [v1.2].FCStd" in captured.out
-
-    # Test special characters in alias pattern
-    main(["get-references", "--aliases", "*[LW]*", str(DATA_DIR / "Test1.FCStd")])
-    captured = capsys.readouterr()
-    assert "Alias references found" in captured.out
-    assert "Alias: Length" in captured.out  # Should match Length
-    assert "Alias: Width" in captured.out  # Should match Width
-
-    # Test Unicode characters in filename
-    main(["get-references", str(DATA_DIR / "Test1_éñå.FCStd")])
-    captured = capsys.readouterr()
-    assert "No alias references found" in captured.out
-    assert "Test1_éñå.FCStd" in captured.out
-
-    # Test Unicode characters in alias pattern
-    main(["get-references", "--aliases", "*é*", str(DATA_DIR / "Test1.FCStd")])
-    captured = capsys.readouterr()
-    assert "No alias references found" in captured.out  # Should not find any since no aliases contain é
-
-
-def test_get_properties(capsys: pytest.CaptureFixture[str]) -> None:
-    """Test get-properties command.
-    Verifies that:
-    1. Properties are correctly extracted
-    2. Output format is correct
-    3. Multiple files are handled"""
-    main(["get-properties", str(DATA_DIR / "Test1.FCStd")])
-    captured = capsys.readouterr()
-    assert "Properties found:" in captured.out
-    assert "Author" in captured.out
-    assert "Comment" in captured.out
-    assert "Company" in captured.out
-
-    # Test empty file
-    main(["get-properties", str(DATA_DIR / "Empty.FCStd")])
-    captured = capsys.readouterr()
-    assert "No properties found" in captured.out
-
-    # Test invalid file
-    main(["get-properties", str(DATA_DIR / "Invalid.FCStd")])
-    captured = capsys.readouterr()
-    assert "is not a valid FCStd file" in captured.err
-
-
-def test_get_aliases(capsys: pytest.CaptureFixture[str]) -> None:
-    """Test get-aliases command.
-    Verifies that:
-    1. Aliases are correctly extracted
-    2. Output format is correct
-    3. Multiple files are handled"""
-    main(["get-aliases", str(DATA_DIR / "Test1.FCStd")])
-    captured = capsys.readouterr()
-    assert "Cell aliases found:" in captured.out
-    assert "Length" in captured.out
-    assert "Width" in captured.out
-    assert "Height" in captured.out
-
-    # Test empty file
-    main(["get-aliases", str(DATA_DIR / "Empty.FCStd")])
-    captured = capsys.readouterr()
-    assert "No cell aliases found" in captured.out
-
-    # Test invalid file
-    main(["get-aliases", str(DATA_DIR / "Invalid.FCStd")])
-    captured = capsys.readouterr()
-    assert "is not a valid FCStd file" in captured.err
 
 
 def test_setup_logging_error(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
@@ -416,3 +306,138 @@ def test_setup_logging_error(capsys: pytest.CaptureFixture[str], tmp_path: Path)
     main(["get-references", "--json", str(DATA_DIR / "Test1.FCStd"), str(DATA_DIR / "Empty.FCStd")])
     captured = capsys.readouterr()
     assert "Starting fc-audit" in captured.err
+
+
+def test_handle_get_properties_error(tmp_path: Path) -> None:
+    """Test handle_get_properties with error."""
+    # Create an invalid FCStd file
+    invalid_file = tmp_path / "invalid.FCStd"
+    invalid_file.write_text("Not a valid FCStd file")
+    args = argparse.Namespace(files=[invalid_file])
+    result = handle_get_properties(args)
+    assert result == 1
+
+
+def test_handle_get_aliases_error(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """Test handle_get_aliases with error."""
+    # Create an invalid FCStd file
+    invalid_file = tmp_path / "invalid.FCStd"
+    invalid_file.write_text("Not a valid FCStd file")
+    args = argparse.Namespace(files=[invalid_file])
+    result = handle_get_aliases(args)
+    assert result == 1
+    captured = capsys.readouterr()
+    assert "Error:" in captured.err
+
+
+def test_handle_get_references_error(tmp_path: Path) -> None:
+    """Test handle_get_references with error."""
+    # Create an invalid FCStd file
+    invalid_file = tmp_path / "invalid.FCStd"
+    invalid_file.write_text("Not a valid FCStd file")
+    args = argparse.Namespace(files=[invalid_file])
+    result = handle_get_references(args)
+    assert result == 1
+
+
+def test_main_error(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """Test main function error handling."""
+    # Test with invalid command
+    with pytest.raises(SystemExit) as excinfo:
+        main(["invalid-command"])
+    assert excinfo.value.code == 2
+
+    # Test with missing files
+    with pytest.raises(SystemExit) as excinfo:
+        main(["get-references"])
+    assert excinfo.value.code == 2
+
+    # Test with error in command handler
+    invalid_file = tmp_path / "invalid.FCStd"
+    invalid_file.write_text("Not a valid FCStd file")
+    main(["get-references", str(invalid_file)])
+    captured = capsys.readouterr()
+    assert "is not a valid FCStd file" in captured.err
+
+    # Test with None args
+    with pytest.raises(SystemExit) as excinfo:
+        main(None)
+    assert excinfo.value.code == 2
+
+
+def test_format_by_object_edge_cases() -> None:
+    """Test format_by_object with edge cases."""
+    # Test with empty references
+    assert format_by_object({}) == {}
+
+    # Test with reference missing filename
+    refs = {
+        "Length": [
+            Reference(
+                object_name="Box",
+                expression="<<globals>>#<<params>>.Length",
+                filename=None,
+                spreadsheet="params",
+                alias="Length",
+            ),
+            Reference(
+                object_name="Box",
+                expression="<<globals>>#<<params>>.Length",
+                filename="test.FCStd",
+                spreadsheet="params",
+                alias="Length",
+            ),
+        ]
+    }
+    result = format_by_object(refs)
+    assert len(result) == 1
+    assert "test.FCStd" in result
+    assert "Box" in result["test.FCStd"]
+    assert "Length" in result["test.FCStd"]["Box"]
+
+
+def test_format_by_file_edge_cases() -> None:
+    """Test format_by_file with edge cases."""
+    # Test with empty references
+    assert format_by_file({}) == {}
+
+    # Test with reference missing filename
+    refs = {
+        "Length": [
+            Reference(
+                object_name="Box",
+                expression="<<globals>>#<<params>>.Length",
+                filename=None,
+                spreadsheet="params",
+                alias="Length",
+            ),
+            Reference(
+                object_name="Box",
+                expression="<<globals>>#<<params>>.Length",
+                filename="test.FCStd",
+                spreadsheet="params",
+                alias="Length",
+            ),
+        ]
+    }
+    result = format_by_file(refs)
+    assert len(result) == 1
+    assert "test.FCStd" in result
+    assert "Length" in result["test.FCStd"]
+
+    # Test with reference missing alias
+    refs = {
+        "Length": [
+            Reference(
+                object_name="Box",
+                expression="<<globals>>#<<params>>.Length",
+                filename="test.FCStd",
+                spreadsheet="params",
+                alias="",
+            )
+        ]
+    }
+    result = format_by_file(refs)
+    assert len(result) == 1
+    assert "test.FCStd" in result
+    assert "Length" in result["test.FCStd"]

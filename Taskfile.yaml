@@ -16,6 +16,7 @@
 # - task lint:ruff: Run ruff linter
 # - task lint:mypy: Run type checks
 # - task format: Format code with ruff
+# - task metrics: Run code quality metrics
 # - task hooks: Run pre-commit hooks
 #
 # Documentation:
@@ -82,6 +83,11 @@ tasks:
     cmds:
       - uv run ruff format src tests
 
+  metrics:
+    desc: Run code quality metrics
+    cmds:
+      - uv run radon cc src
+
   hooks:
     desc: Run pre-commit hooks
     cmds:
@@ -128,6 +134,7 @@ tasks:
     desc: Run all CI checks
     cmds:
       - task: lint
+      - task: metrics
       - task: test:coverage
       - task: docs:build
       - task: build

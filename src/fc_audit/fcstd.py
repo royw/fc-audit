@@ -1,15 +1,23 @@
-"""Module for handling FreeCAD document files."""
-
 from __future__ import annotations
 
 import html
+import logging
 import re
 import xml.etree.ElementTree as ET
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from loguru import logger
+from .exceptions import (
+    ExpressionError,
+    InvalidFileError,
+    ReferenceError,
+    XMLParseError,
+)
+
+"""Module for handling FreeCAD document files."""
+
+logger = logging.getLogger(__name__)
 
 
 def is_fcstd_file(filepath: Path) -> bool:
@@ -21,15 +29,25 @@ def is_fcstd_file(filepath: Path) -> bool:
     Returns:
         True if file is a valid FCStd file, False otherwise
     """
-    logger.debug(f"Checking if {filepath} is a valid FCStd file")
-    if not zipfile.is_zipfile(filepath):
-        logger.debug(f"{filepath} is not a valid zip file")
-        return False
+    try:
+        if not filepath.is_file():
+            logger.debug("%s is not a file", filepath)
+            return False
 
-    with zipfile.ZipFile(filepath) as zf:
-        files = zf.namelist()
-        logger.debug(f"Files in {filepath}: {files}")
-        return "Document.xml" in files
+        logger.debug("Checking if %s is a valid FCStd file", filepath)
+        if not zipfile.is_zipfile(filepath):
+            logger.debug("%s is not a valid zip file", filepath)
+            return False
+
+        with zipfile.ZipFile(filepath) as zf:
+            files = zf.namelist()
+            debug_msg = f"Files in {filepath}: {files}"
+            logger.debug(debug_msg)
+            return "Document.xml" in files
+    except Exception as e:
+        debug_msg = f"Error checking {filepath}: {e}"
+        logger.debug(debug_msg)
+        return False
 
 
 def get_document_properties(filepath: Path) -> set[str]:
@@ -42,23 +60,34 @@ def get_document_properties(filepath: Path) -> set[str]:
         Set of unique property names found in the document
 
     Raises:
-        ValueError: If file is not a valid FCStd file
+        InvalidFileError: If file is not a valid FCStd file
+        XMLParseError: If XML parsing fails
     """
     if not is_fcstd_file(filepath):
         error_msg = f"{filepath} is not a valid FCStd file"
-        raise ValueError(error_msg)
+        raise InvalidFileError(error_msg)
 
-    properties = set()
-    with zipfile.ZipFile(filepath) as zf, zf.open("Document.xml") as f:
-        tree = ET.parse(f)
-        root = tree.getroot()
+    try:
+        content = _read_xml_content(filepath)
+        root = _parse_xml_content(content)
 
         # Find all Property elements
-        for prop in root.findall(".//Property"):
-            if "name" in prop.attrib:
+        properties = set()
+        for prop in root.findall(".//Property[@name]"):
+            try:
                 properties.add(prop.attrib["name"])
+            except KeyError:
+                continue
 
-    return properties
+        return properties
+
+    except (InvalidFileError, XMLParseError) as e:
+        logger.error(str(e))
+        raise
+    except Exception as e:
+        error_msg = f"Failed to parse properties: {e}"
+        logger.error(error_msg)
+        raise XMLParseError(error_msg) from e
 
 
 def get_cell_aliases(filepath: Path) -> set[str]:
@@ -71,22 +100,34 @@ def get_cell_aliases(filepath: Path) -> set[str]:
         Set of unique cell aliases found in the document
 
     Raises:
-        ValueError: If file is not a valid FCStd file
+        InvalidFileError: If file is not a valid FCStd file
+        XMLParseError: If XML parsing fails
     """
     if not is_fcstd_file(filepath):
         error_msg = f"{filepath} is not a valid FCStd file"
-        raise ValueError(error_msg)
+        raise InvalidFileError(error_msg)
 
-    aliases = set()
-    with zipfile.ZipFile(filepath) as zf, zf.open("Document.xml") as f:
-        tree = ET.parse(f)
-        root = tree.getroot()
+    try:
+        content = _read_xml_content(filepath)
+        root = _parse_xml_content(content)
 
-        # Find all Cell elements with alias attributes
+        # Find all Cell elements with aliases
+        aliases = set()
         for cell in root.findall(".//Cell[@alias]"):
-            aliases.add(cell.attrib["alias"])
+            try:
+                aliases.add(cell.attrib["alias"])
+            except KeyError:
+                continue
 
-    return aliases
+        return aliases
+
+    except (InvalidFileError, XMLParseError) as e:
+        logger.error(str(e))
+        raise
+    except Exception as e:
+        error_msg = f"Failed to parse cell aliases: {e}"
+        logger.error(error_msg)
+        raise XMLParseError(error_msg) from e
 
 
 def _find_parent_with_identifier(element: ET.Element, root: ET.Element) -> tuple[ET.Element | None, str]:
@@ -120,6 +161,103 @@ def _find_parent_with_identifier(element: ET.Element, root: ET.Element) -> tuple
     return None, "unknown"
 
 
+def _read_xml_content(filepath: Path) -> str:
+    """Read XML content from a FCStd file.
+
+    Args:
+        filepath: Path to FCStd file
+
+    Returns:
+        XML content as string
+
+    Raises:
+        InvalidFileError: If file cannot be read
+    """
+    try:
+        with zipfile.ZipFile(filepath) as zf:
+            try:
+                with zf.open("Document.xml") as f:
+                    content = f.read().decode("utf-8")
+                    if not content.strip().startswith("<?xml"):
+                        error_msg = f"Invalid XML content in {filepath}"
+                        raise InvalidFileError(error_msg)
+                    return content
+            except (KeyError, UnicodeDecodeError) as e:
+                error_msg = f"No Document.xml found in {filepath}: {e}"
+                raise InvalidFileError(error_msg) from e
+    except (zipfile.BadZipFile, OSError) as e:
+        error_msg = f"Failed to read {filepath}: {e}"
+        raise InvalidFileError(error_msg) from e
+
+
+def _parse_xml_content(content: str) -> ET.Element:
+    """Parse XML content into an ElementTree.
+
+    Args:
+        content: XML content as string
+
+    Returns:
+        Root element of parsed XML tree
+
+    Raises:
+        XMLParseError: If XML parsing fails
+    """
+    try:
+        # Create a parser with limited depth to prevent stack overflow
+        parser = ET.XMLParser()
+        return ET.fromstring(content, parser=parser)
+    except (ET.ParseError, RecursionError, XMLParseError) as e:
+        error_msg = f"Failed to parse XML content: {e}"
+        raise XMLParseError(error_msg) from e
+
+
+def _extract_expression(expr: ET.Element, root: ET.Element) -> tuple[str, str]:
+    """Extract expression and context from an Expression element.
+
+    Args:
+        expr: Expression element
+        root: Root element of XML tree
+
+    Returns:
+        Tuple of (context, expression value)
+
+    Raises:
+        ExpressionError: If expression cannot be parsed
+    """
+    try:
+        parent, context = _find_parent_with_identifier(expr, root)
+        if parent is None:
+            error_msg = "No parent with identifier found"
+            raise ExpressionError(error_msg)
+
+        value = html.unescape(expr.attrib["expression"])
+        return context, value
+    except (KeyError, ValueError) as e:
+        error_msg = f"Failed to parse expression: {e}"
+        raise ExpressionError(error_msg) from e
+
+
+def _make_unique_key(base_key: str, existing_keys: set[str]) -> str:
+    """Create a unique key by appending a counter if needed.
+
+    Args:
+        base_key: Base key to make unique
+        existing_keys: Set of existing keys
+
+    Returns:
+        Unique key
+    """
+    if base_key not in existing_keys:
+        return base_key
+
+    counter = 1
+    while True:
+        key = f"{base_key} ({counter})"
+        if key not in existing_keys:
+            return key
+        counter += 1
+
+
 def get_expressions(filepath: Path) -> dict[str, str]:
     """Extract expressions from a FreeCAD document.
 
@@ -130,35 +268,39 @@ def get_expressions(filepath: Path) -> dict[str, str]:
         Dictionary mapping expression elements to their unescaped expressions
 
     Raises:
-        ValueError: If file is not a valid FCStd file
+        InvalidFileError: If file is not a valid FCStd file
+        XMLParseError: If XML parsing fails or nesting depth exceeds limit
     """
     if not is_fcstd_file(filepath):
         error_msg = f"{filepath} is not a valid FCStd file"
-        raise ValueError(error_msg)
+        raise InvalidFileError(error_msg)
 
-    expressions = {}
-    with zipfile.ZipFile(filepath) as zf, zf.open("Document.xml") as f:
-        content = f.read().decode("utf-8")
-        tree = ET.fromstring(content)
-        root = tree
+    expressions: dict[str, str] = {}
+    try:
+        content = _read_xml_content(filepath)
+        root = _parse_xml_content(content)
 
         # Find all Expression elements with expression attributes
         for expr in root.findall(".//Expression[@expression]"):
-            # Find parent context
-            _, context = _find_parent_with_identifier(expr, root)
-
-            # Unescape the expression value
-            value = html.unescape(expr.attrib["expression"])
-
-            # Create a unique key by combining context with expression count
-            key = context
-            base_key = key
-            counter = 1
-            while key in expressions:
-                counter += 1
-                key = f"{base_key} ({counter})"
-
-            expressions[key] = value
+            try:
+                context, value = _extract_expression(expr, root)
+                key = _make_unique_key(context, set(expressions.keys()))
+                expressions[key] = value
+            except ExpressionError as e:
+                error_msg = f"Error parsing expression in {filepath}: {e}"
+                logger.warning(error_msg)
+                continue
+    except InvalidFileError:
+        raise
+    except (ET.ParseError, XMLParseError) as e:
+        error_msg = f"Failed to parse XML content from {filepath}: {e}"
+        logger.error(error_msg)
+        error_msg = f"Failed to parse XML content: {e}"
+        raise XMLParseError(error_msg) from e
+    except Exception as e:
+        error_msg = f"Failed to parse expressions: {e}"
+        logger.error(error_msg)
+        return {}
 
     return expressions
 
@@ -257,51 +399,71 @@ def _parse_object_element(obj: ET.Element, filename: str) -> list[tuple[str, Ref
     except Exception as e:
         error_msg = f"Error parsing object in {filename}: {e}"
         logger.warning(error_msg)
+        raise ReferenceError(error_msg) from e
     return refs
+
+
+def _group_references_by_alias(obj_refs: list[tuple[str, Reference]]) -> dict[str, list[Reference]]:
+    """Group references by their alias names.
+
+    Args:
+        obj_refs: List of (alias, Reference) tuples
+
+    Returns:
+        Dictionary mapping alias names to lists of Reference objects
+    """
+    references: dict[str, list[Reference]] = {}
+    for alias, ref in obj_refs:
+        if alias not in references:
+            references[alias] = []
+        references[alias].append(ref)
+    return references
 
 
 def _parse_document_references(content: str, filename: str) -> dict[str, list[Reference]]:
     """Parse XML content to extract all alias references from a Document.
 
     Args:
-        content: XML content from Document.xml as a string
-        filename: Name of the FCStd file being parsed
+        content: XML content as string
+        filename: Name of the file being processed
 
     Returns:
-        Dictionary mapping alias names to lists of Reference objects.
-        Each Reference object contains the full context of where and how
-        the alias is referenced. Returns an empty dict if the content
-        is not valid XML or contains no valid references.
+        Dictionary mapping alias names to lists of Reference objects
+
+    Raises:
+        XMLParseError: If XML parsing fails
     """
-    references: dict[str, list[Reference]] = {}
     try:
-        root = ET.fromstring(content)
+        root = _parse_xml_content(content)
 
-        # Find all Cell elements with aliases in ObjectData section
-        for sheet in root.findall(".//ObjectData/Object[@name='Sheet']/Cells/Cell[@alias]"):
-            alias = sheet.attrib["alias"]
-            if alias not in references:
-                references[alias] = []
-
-        # Find all Expression elements with expression attributes
+        # Find all Object elements with expressions
+        obj_refs = []
         for obj in root.findall(".//Object[@name]"):
-            for alias, ref in _parse_object_element(obj, filename):
-                if alias not in references:
-                    references[alias] = []
-                ref.spreadsheet = "Sheet"
-                references[alias].append(ref)
+            obj_name = obj.attrib["name"]
+            for expr in obj.findall(".//Expression"):
+                try:
+                    alias = parse_reference(expr.attrib["expression"])
+                    if alias:
+                        ref = Reference(obj_name, expr.attrib["expression"], filename)
+                        obj_refs.append((alias, ref))
+                    else:
+                        context = f"Object[{obj_name}]"
+                        ref = Reference(filename, obj_name, expr.attrib["expression"])
+                        obj_refs.append((context, ref))
+                except (KeyError, ExpressionError) as e:
+                    error_msg = f"Error parsing expression in {filename}: {e}"
+                    logger.warning(error_msg)
+                    continue
 
-        if not references:
-            info_msg = f"No alias references found in {filename}"
-            logger.info(info_msg)
-    except ET.ParseError as e:
-        error_msg = f"Failed to parse XML content from {filename}: {e}"
+        return _group_references_by_alias(obj_refs)
+    except XMLParseError:
+        error_msg = f"Failed to parse XML content from {filename}"
         logger.error(error_msg)
+        return {}
     except Exception as e:
         error_msg = f"Unexpected error parsing {filename}: {e}"
         logger.error(error_msg)
-
-    return references
+        return {}
 
 
 def get_references(filepath: Path) -> dict[str, list[Reference]]:
@@ -314,15 +476,27 @@ def get_references(filepath: Path) -> dict[str, list[Reference]]:
         Dictionary mapping alias names to list of references
 
     Raises:
-        ValueError: If file is not a valid FCStd file
+        InvalidFileError: If file is not a valid FCStd file
+        XMLParseError: If XML parsing fails or nesting depth exceeds limit
     """
     if not is_fcstd_file(filepath):
         error_msg = f"{filepath} is not a valid FCStd file"
-        raise ValueError(error_msg)
+        raise InvalidFileError(error_msg)
 
-    with zipfile.ZipFile(filepath) as zf, zf.open("Document.xml") as f:
-        content = f.read().decode("utf-8")
-        return _parse_document_references(content, str(filepath))
+    try:
+        content = _read_xml_content(filepath)
+        return _parse_document_references(content, filepath.name)
+    except InvalidFileError:
+        raise
+    except (ET.ParseError, XMLParseError) as e:
+        error_msg = f"Error parsing {filepath}: {e}"
+        logger.error(error_msg)
+        error_msg2 = f"Failed to parse XML content: {e}"
+        raise XMLParseError(error_msg2) from e
+    except Exception as e:
+        error_msg = f"Unexpected error parsing {filepath}: {e}"
+        logger.error(error_msg)
+        return {}
 
 
 def get_references_from_files(filepaths: list[Path]) -> dict[str, list[Reference]]:
@@ -333,24 +507,46 @@ def get_references_from_files(filepaths: list[Path]) -> dict[str, list[Reference
 
     Returns:
         Dictionary mapping alias names to list of references
+
+    Note:
+        This function will attempt to process all files even if some fail.
+        Errors for individual files will be logged but not propagated.
     """
     all_references: dict[str, list[Reference]] = {}
+
     for filepath in filepaths:
         try:
-            file_refs = get_references(filepath)
-            for alias, refs in file_refs.items():
-                if alias not in all_references:
-                    all_references[alias] = []
-                # Add filename to each reference
-                for ref in refs:
-                    ref.filename = filepath.name
-                all_references[alias].extend(refs)
-        except ValueError as e:
+            if not is_fcstd_file(filepath):
+                warning_msg = f"Skipping {filepath}: not a valid FCStd file"
+                logger.warning(warning_msg)
+                continue
+
+            references = get_references(filepath)
+            _merge_references(all_references, references)
+
+        except InvalidFileError as e:
+            logger.warning(str(e))
+        except (XMLParseError, ReferenceError) as e:
             error_msg = f"Error processing {filepath}: {e}"
-            logger.warning(error_msg)
-            continue
+            logger.error(error_msg)
+        except Exception as e:
+            error_msg = f"Unexpected error processing {filepath}: {e}"
+            logger.error(error_msg)
 
     return all_references
+
+
+def _merge_references(all_references: dict[str, list[Reference]], new_references: dict[str, list[Reference]]) -> None:
+    """Merge new references into the existing set of references.
+
+    Args:
+        all_references: Existing dictionary of references
+        new_references: New dictionary of references to merge
+    """
+    for alias, refs in new_references.items():
+        if alias not in all_references:
+            all_references[alias] = []
+        all_references[alias].extend(refs)
 
 
 def get_cell_aliases_from_files(filepaths: list[Path]) -> set[str]:
@@ -361,15 +557,31 @@ def get_cell_aliases_from_files(filepaths: list[Path]) -> set[str]:
 
     Returns:
         Set of unique cell aliases found across all documents
+
+    Note:
+        This function will attempt to process all files even if some fail.
+        Errors for individual files will be logged but not propagated.
     """
     all_aliases = set()
+
     for filepath in filepaths:
         try:
+            if not is_fcstd_file(filepath):
+                warning_msg = f"Skipping {filepath}: not a valid FCStd file"
+                logger.warning(warning_msg)
+                continue
+
             aliases = get_cell_aliases(filepath)
             all_aliases.update(aliases)
-        except (ValueError, ET.ParseError) as e:
+
+        except InvalidFileError as e:
             logger.warning(str(e))
-            continue
+        except XMLParseError as e:
+            error_msg = f"Failed to parse XML content from {filepath}: {e}"
+            logger.error(error_msg)
+        except Exception as e:
+            error_msg = f"Unexpected error processing {filepath}: {e}"
+            logger.error(error_msg)
 
     return all_aliases
 
@@ -382,14 +594,30 @@ def get_properties_from_files(filepaths: list[Path]) -> set[str]:
 
     Returns:
         Set of unique property names found across all documents
+
+    Note:
+        This function will attempt to process all files even if some fail.
+        Errors for individual files will be logged but not propagated.
     """
     all_properties = set()
+
     for filepath in filepaths:
         try:
-            props = get_document_properties(filepath)
-            all_properties.update(props)
-        except ValueError as e:
+            if not is_fcstd_file(filepath):
+                warning_msg = f"Skipping {filepath}: not a valid FCStd file"
+                logger.warning(warning_msg)
+                continue
+
+            properties = get_document_properties(filepath)
+            all_properties.update(properties)
+
+        except InvalidFileError as e:
             logger.warning(str(e))
-            continue
+        except XMLParseError as e:
+            error_msg = f"Failed to parse XML content from {filepath}: {e}"
+            logger.error(error_msg)
+        except Exception as e:
+            error_msg = f"Unexpected error processing {filepath}: {e}"
+            logger.error(error_msg)
 
     return all_properties

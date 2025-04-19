@@ -3,3 +3,7 @@
 data/
 dist/
 site/
+.*_cache
+.tox
+.venv
+__pycache__
