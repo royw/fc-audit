@@ -8,6 +8,7 @@ import xml.etree.ElementTree as ET
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
+from re import Match
 
 from loguru import logger
 
@@ -42,6 +43,7 @@ class ReferenceCollector:
         Returns:
             Dictionary mapping alias names to lists of references
         """
+        filepath: Path
         for filepath in self.file_paths:
             try:
                 self._process_file(filepath)
@@ -64,12 +66,12 @@ class ReferenceCollector:
             error_msg = f"{filepath} is not a valid FCStd file"
             raise ValueError(error_msg)
 
-        filename = filepath.name
+        filename: str = filepath.name
         self.processed_files.add(filename)
 
         with zipfile.ZipFile(filepath) as zf, zf.open("Document.xml") as f:
-            content = f.read().decode("utf-8")
-            file_refs = self._parse_document_references(content, filename)
+            content: str = f.read().decode("utf-8")
+            file_refs: dict[str, list[Reference]] = self._parse_document_references(content, filename)
             self._merge_references(file_refs)
 
     def _is_fcstd_file(self, filepath: Path) -> bool:
@@ -83,13 +85,16 @@ class ReferenceCollector:
     def _parse_document_references(self, content: str, filename: str) -> dict[str, list[Reference]]:
         """Parse XML content to extract all alias references from a Document."""
         try:
-            root = ET.fromstring(content)
+            root: ET.Element = ET.fromstring(content)
         except ET.ParseError as e:
             logger.error(f"Error parsing XML in {filename}: {e}")
             return {}
 
         refs: dict[str, list[Reference]] = {}
+        obj: ET.Element
         for obj in root.findall(".//Object"):
+            alias: str
+            ref: Reference
             for alias, ref in self._parse_object_element(obj, filename):
                 if alias not in refs:
                     refs[alias] = []
@@ -102,9 +107,10 @@ class ReferenceCollector:
         if "name" not in obj.attrib:
             return []
 
-        obj_name = obj.attrib["name"]
-        refs = []
+        obj_name: str = obj.attrib["name"]
+        refs: list[tuple[str, Reference]] = []
 
+        expr: ET.Element
         for expr in obj.findall(".//Expression[@expression]"):
             result = self._parse_expression_element(expr, obj_name, filename)
             if result:
@@ -116,12 +122,12 @@ class ReferenceCollector:
         self, expr_elem: ET.Element, obj_name: str, filename: str
     ) -> tuple[str, Reference] | None:
         """Parse an Expression element and create a Reference if it contains an alias."""
-        expr = html.unescape(expr_elem.attrib["expression"])
-        alias = self._parse_reference(expr)
+        expr: str = html.unescape(expr_elem.attrib["expression"])
+        alias: str | None = self._parse_reference(expr)
         if not alias:
             return None
 
-        ref = Reference(
+        ref: Reference = Reference(
             object_name=obj_name,
             expression=expr,
             filename=filename,
@@ -132,12 +138,14 @@ class ReferenceCollector:
 
     def _parse_reference(self, expr: str) -> str | None:
         """Parse a reference from an expression."""
-        pattern = r"<<globals>>#<<params>>\.([^\s+\-*/()]+)"
-        match = re.search(pattern, expr)
+        pattern: str = r"<<globals>>#<<params>>\.([^\s+\-*/()]+)"
+        match: Match[str] | None = re.search(pattern, expr)
         return match.group(1) if match else None
 
     def _merge_references(self, new_refs: dict[str, list[Reference]]) -> None:
         """Merge new references into the existing references."""
+        alias: str
+        refs: list[Reference]
         for alias, refs in new_refs.items():
             if alias not in self.references:
                 self.references[alias] = []

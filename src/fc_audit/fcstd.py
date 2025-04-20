@@ -1,3 +1,5 @@
+"""Module for handling FreeCAD document files."""
+
 from __future__ import annotations
 
 import html
@@ -7,6 +9,7 @@ import xml.etree.ElementTree as ET
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
+from re import Match
 
 from .exceptions import (
     ExpressionError,
@@ -14,8 +17,6 @@ from .exceptions import (
     ReferenceError,
     XMLParseError,
 )
-
-"""Module for handling FreeCAD document files."""
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +41,7 @@ def is_fcstd_file(filepath: Path) -> bool:
             return False
 
         with zipfile.ZipFile(filepath) as zf:
-            files = zf.namelist()
+            files: list[str] = zf.namelist()
             debug_msg = f"Files in {filepath}: {files}"
             logger.debug(debug_msg)
             return "Document.xml" in files
@@ -68,11 +69,11 @@ def get_document_properties(filepath: Path) -> set[str]:
         raise InvalidFileError(error_msg)
 
     try:
-        content = _read_xml_content(filepath)
-        root = _parse_xml_content(content)
+        content: str = _read_xml_content(filepath)
+        root: ET.Element = _parse_xml_content(content)
 
         # Find all Property elements
-        properties = set()
+        properties: set[str] = set()
         for prop in root.findall(".//Property[@name]"):
             try:
                 properties.add(prop.attrib["name"])
@@ -108,11 +109,11 @@ def get_cell_aliases(filepath: Path) -> set[str]:
         raise InvalidFileError(error_msg)
 
     try:
-        content = _read_xml_content(filepath)
-        root = _parse_xml_content(content)
+        content: str = _read_xml_content(filepath)
+        root: ET.Element = _parse_xml_content(content)
 
         # Find all Cell elements with aliases
-        aliases = set()
+        aliases: set[str] = set()
         for cell in root.findall(".//Cell[@alias]"):
             try:
                 aliases.add(cell.attrib["alias"])
@@ -143,11 +144,13 @@ def _find_parent_with_identifier(element: ET.Element, root: ET.Element) -> tuple
         root: Root element of the XML tree
 
     Returns:
-        Tuple of (parent element or None, context string)
+        Tuple of (parent element, context string) or (None, "unknown")
         The context string is formatted as 'Tag[identifier]' where identifier
         is the value of the first identifying attribute found (name, type, or label)
     """
+    ancestor: ET.Element
     for ancestor in root.findall(".//*"):
+        child: ET.Element
         for child in ancestor.findall(".//*"):
             if child == element:
                 # Build context string from the ancestor's attributes
@@ -177,7 +180,7 @@ def _read_xml_content(filepath: Path) -> str:
         with zipfile.ZipFile(filepath) as zf:
             try:
                 with zf.open("Document.xml") as f:
-                    content = f.read().decode("utf-8")
+                    content: str = f.read().decode("utf-8")
                     if not content.strip().startswith("<?xml"):
                         error_msg = f"Invalid XML content in {filepath}"
                         raise InvalidFileError(error_msg)
@@ -204,7 +207,7 @@ def _parse_xml_content(content: str) -> ET.Element:
     """
     try:
         # Create a parser with limited depth to prevent stack overflow
-        parser = ET.XMLParser()
+        parser: ET.XMLParser = ET.XMLParser()
         return ET.fromstring(content, parser=parser)
     except (ET.ParseError, RecursionError, XMLParseError) as e:
         error_msg = f"Failed to parse XML content: {e}"
@@ -225,12 +228,14 @@ def _extract_expression(expr: ET.Element, root: ET.Element) -> tuple[str, str]:
         ExpressionError: If expression cannot be parsed
     """
     try:
+        parent: ET.Element | None
+        context: str
         parent, context = _find_parent_with_identifier(expr, root)
         if parent is None:
             error_msg = "No parent with identifier found"
             raise ExpressionError(error_msg)
 
-        value = html.unescape(expr.attrib["expression"])
+        value: str = html.unescape(expr.attrib["expression"])
         return context, value
     except (KeyError, ValueError) as e:
         error_msg = f"Failed to parse expression: {e}"
@@ -277,14 +282,17 @@ def get_expressions(filepath: Path) -> dict[str, str]:
 
     expressions: dict[str, str] = {}
     try:
-        content = _read_xml_content(filepath)
-        root = _parse_xml_content(content)
+        content: str = _read_xml_content(filepath)
+        root: ET.Element = _parse_xml_content(content)
 
         # Find all Expression elements with expression attributes
+        expr: ET.Element
         for expr in root.findall(".//Expression[@expression]"):
             try:
+                context: str
+                value: str
                 context, value = _extract_expression(expr, root)
-                key = _make_unique_key(context, set(expressions.keys()))
+                key: str = _make_unique_key(context, set(expressions.keys()))
                 expressions[key] = value
             except ExpressionError as e:
                 error_msg = f"Error parsing expression in {filepath}: {e}"
@@ -336,8 +344,8 @@ def parse_reference(expr: str) -> str | None:
         Alias name if found, None otherwise
     """
     # Pattern for optional <<n>> or name followed by # then optional <<n>> or name then . then name
-    pattern = r"<<globals>>#<<params>>\.([^\s+\-*/()]+)"
-    match = re.search(pattern, expr)
+    pattern: str = r"<<globals>>#<<params>>\.([^\s+\-*/()]+)"
+    match: Match[str] | None = re.search(pattern, expr)
     if match:
         # The alias is always the first group
         return match.group(1)
@@ -360,10 +368,10 @@ def _parse_expression_element(expr_elem: ET.Element, obj_name: str, filename: st
             None
     """
     try:
-        expr = html.unescape(expr_elem.attrib["expression"])
-        alias = parse_reference(expr)
+        expr: str = html.unescape(expr_elem.attrib["expression"])
+        alias: str | None = parse_reference(expr)
         if alias:
-            ref = Reference(object_name=obj_name, expression=expr, filename=filename, alias=alias)
+            ref: Reference = Reference(object_name=obj_name, expression=expr, filename=filename, alias=alias)
             return alias, ref
     except KeyError:
         error_msg = f"Expression element missing 'expression' attribute in {filename}"
@@ -386,11 +394,12 @@ def _parse_object_element(obj: ET.Element, filename: str) -> list[tuple[str, Ref
         in any Expression elements within this Object. Returns an empty list
         if no valid references are found or if the Object has no name attribute.
     """
-    refs = []
+    refs: list[tuple[str, Reference]] = []
     try:
-        obj_name = obj.attrib["name"]
+        obj_name: str = obj.attrib["name"]
+        expr_elem: ET.Element
         for expr_elem in obj.findall(".//Expression[@expression]"):
-            result = _parse_expression_element(expr_elem, obj_name, filename)
+            result: tuple[str, Reference] | None = _parse_expression_element(expr_elem, obj_name, filename)
             if result:
                 refs.append(result)
     except KeyError:
@@ -413,6 +422,8 @@ def _group_references_by_alias(obj_refs: list[tuple[str, Reference]]) -> dict[st
         Dictionary mapping alias names to lists of Reference objects
     """
     references: dict[str, list[Reference]] = {}
+    alias: str
+    ref: Reference
     for alias, ref in obj_refs:
         if alias not in references:
             references[alias] = []
@@ -434,20 +445,22 @@ def _parse_document_references(content: str, filename: str) -> dict[str, list[Re
         XMLParseError: If XML parsing fails
     """
     try:
-        root = _parse_xml_content(content)
+        root: ET.Element = _parse_xml_content(content)
 
         # Find all Object elements with expressions
-        obj_refs = []
+        obj_refs: list[tuple[str, Reference]] = []
+        obj: ET.Element
         for obj in root.findall(".//Object[@name]"):
-            obj_name = obj.attrib["name"]
+            obj_name: str = obj.attrib["name"]
+            expr: ET.Element
             for expr in obj.findall(".//Expression"):
                 try:
-                    alias = parse_reference(expr.attrib["expression"])
+                    alias: str | None = parse_reference(expr.attrib["expression"])
                     if alias:
-                        ref = Reference(obj_name, expr.attrib["expression"], filename)
+                        ref: Reference = Reference(obj_name, expr.attrib["expression"], filename)
                         obj_refs.append((alias, ref))
                     else:
-                        context = f"Object[{obj_name}]"
+                        context: str = f"Object[{obj_name}]"
                         ref = Reference(filename, obj_name, expr.attrib["expression"])
                         obj_refs.append((context, ref))
                 except (KeyError, ExpressionError) as e:
@@ -484,7 +497,7 @@ def get_references(filepath: Path) -> dict[str, list[Reference]]:
         raise InvalidFileError(error_msg)
 
     try:
-        content = _read_xml_content(filepath)
+        content: str = _read_xml_content(filepath)
         return _parse_document_references(content, filepath.name)
     except InvalidFileError:
         raise
@@ -521,7 +534,7 @@ def get_references_from_files(filepaths: list[Path]) -> dict[str, list[Reference
                 logger.warning(warning_msg)
                 continue
 
-            references = get_references(filepath)
+            references: dict[str, list[Reference]] = get_references(filepath)
             _merge_references(all_references, references)
 
         except InvalidFileError as e:
@@ -543,6 +556,8 @@ def _merge_references(all_references: dict[str, list[Reference]], new_references
         all_references: Existing dictionary of references
         new_references: New dictionary of references to merge
     """
+    alias: str
+    refs: list[Reference]
     for alias, refs in new_references.items():
         if alias not in all_references:
             all_references[alias] = []
@@ -562,7 +577,7 @@ def get_cell_aliases_from_files(filepaths: list[Path]) -> set[str]:
         This function will attempt to process all files even if some fail.
         Errors for individual files will be logged but not propagated.
     """
-    all_aliases = set()
+    all_aliases: set[str] = set()
 
     for filepath in filepaths:
         try:
@@ -571,7 +586,7 @@ def get_cell_aliases_from_files(filepaths: list[Path]) -> set[str]:
                 logger.warning(warning_msg)
                 continue
 
-            aliases = get_cell_aliases(filepath)
+            aliases: set[str] = get_cell_aliases(filepath)
             all_aliases.update(aliases)
 
         except InvalidFileError as e:
@@ -608,7 +623,7 @@ def get_properties_from_files(filepaths: list[Path]) -> set[str]:
                 logger.warning(warning_msg)
                 continue
 
-            properties = get_document_properties(filepath)
+            properties: set[str] = get_document_properties(filepath)
             all_properties.update(properties)
 
         except InvalidFileError as e:

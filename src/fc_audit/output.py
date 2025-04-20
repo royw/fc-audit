@@ -19,8 +19,8 @@ class ReferenceOutputter:
             references: Dictionary mapping alias names to lists of references
             processed_files: Set of all processed file names
         """
-        self.references = references
-        self.processed_files = processed_files
+        self.references: dict[str, list[Reference]] = references
+        self.processed_files: set[str] = processed_files
 
     def filter_by_patterns(self, patterns: Sequence[str]) -> None:
         """Filter references by alias patterns.
@@ -31,8 +31,11 @@ class ReferenceOutputter:
         if not patterns or not any(patterns):
             return
 
-        filtered_refs = {}
+        filtered_refs: dict[str, list[Reference]] = {}
+        alias: str
+        refs: list[Reference]
         for alias, refs in self.references.items():
+            pattern: str
             for pattern in patterns:
                 if pattern and fnmatch.fnmatch(alias, pattern):
                     filtered_refs[alias] = refs
@@ -56,6 +59,9 @@ class ReferenceOutputter:
             return {}
 
         by_file_obj: dict[str, dict[str, dict[str, list[Reference]]]] = {}
+        alias: str
+        refs: list[Reference]
+        ref: Reference
         for alias, refs in self.references.items():
             for ref in refs:
                 if ref.filename is not None:
@@ -83,6 +89,9 @@ class ReferenceOutputter:
             return {}
 
         by_file: dict[str, dict[str, list[Reference]]] = {}
+        alias: str
+        refs: list[Reference]
+        ref: Reference
         for alias, refs in self.references.items():
             for ref in refs:
                 if ref.filename is not None:
@@ -104,6 +113,9 @@ class ReferenceOutputter:
 
         # Convert references to serializable format
         json_refs: dict[str, list[dict[str, str | None]]] = {}
+        alias: str
+        refs: list[Reference]
+        ref: Reference
         for alias, refs in self.references.items():
             json_refs[alias] = []
             for ref in refs:
@@ -128,6 +140,9 @@ class ReferenceOutputter:
             for obj_name in sorted(by_file_obj[filename]):
                 print(f"\nObject: {obj_name}")
                 print(f"  File: {filename}")
+                alias: str
+                refs: list[Reference]
+                ref: Reference
                 for alias in sorted(by_file_obj[filename][obj_name]):
                     refs = by_file_obj[filename][obj_name][alias]
                     for ref in refs:
@@ -143,6 +158,8 @@ class ReferenceOutputter:
         by_file = self.format_by_file()
         for filename in sorted(by_file):
             print(f"\nFile: {filename}")
+            alias: str
+            ref: Reference
             for alias in sorted(by_file[filename]):
                 print(f"  Alias: {alias}")
                 for ref in by_file[filename][alias]:
@@ -155,6 +172,8 @@ class ReferenceOutputter:
             print("No alias references found")
             return
 
+        alias: str
+        ref: Reference
         for alias in sorted(self.references):
             print(f"\nAlias: {alias}")
             for ref in sorted(self.references[alias], key=lambda r: (r.filename or "", r.object_name)):
@@ -165,14 +184,14 @@ class ReferenceOutputter:
     def print_empty_files(self) -> None:
         """Print list of files that have no references."""
         # Get set of files that have references
-        files_with_refs = set()
+        files_with_refs: set[str] = set()
         for refs in self.references.values():
             for ref in refs:
                 if ref.filename:
                     files_with_refs.add(ref.filename)
 
         # Find files that were processed but have no references
-        empty_files = self.processed_files - files_with_refs
+        empty_files: set[str] = self.processed_files - files_with_refs
         if empty_files:
             print("\nFiles with no references:")
             for filename in sorted(empty_files):
