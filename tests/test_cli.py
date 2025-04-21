@@ -421,30 +421,23 @@ def test_format_by_object_edge_cases() -> None:
 
 def test_by_file_sort_order(capsys: pytest.CaptureFixture[str]) -> None:
     """Test that --by-file output is sorted by file, alias, then object."""
-    from fc_audit.cli import _print_by_file_format
+    from fc_audit.output import ReferenceOutputter
     from fc_audit.reference_collector import Reference
 
     # Construct unsorted input
     refs = {
-        "b.FCStd": {
-            "Beta": [
-                Reference(object_name="ObjB", expression="e1", filename="b.FCStd", spreadsheet="s", alias="Beta")
-            ],
-            "Alpha": [
-                Reference(object_name="ObjA", expression="e2", filename="b.FCStd", spreadsheet="s", alias="Alpha")
-            ],
-        },
-        "a.FCStd": {
-            "Beta": [
-                Reference(object_name="ObjB", expression="e3", filename="a.FCStd", spreadsheet="s", alias="Beta")
-            ],
-            "Alpha": [
-                Reference(object_name="ObjC", expression="e4", filename="a.FCStd", spreadsheet="s", alias="Alpha"),
-                Reference(object_name="ObjA", expression="e5", filename="a.FCStd", spreadsheet="s", alias="Alpha"),
-            ],
-        },
+        "Beta": [
+            Reference(object_name="ObjB", expression="e1", filename="b.FCStd", spreadsheet="s", alias="Beta"),
+            Reference(object_name="ObjB", expression="e3", filename="a.FCStd", spreadsheet="s", alias="Beta"),
+        ],
+        "Alpha": [
+            Reference(object_name="ObjA", expression="e2", filename="b.FCStd", spreadsheet="s", alias="Alpha"),
+            Reference(object_name="ObjC", expression="e4", filename="a.FCStd", spreadsheet="s", alias="Alpha"),
+            Reference(object_name="ObjA", expression="e5", filename="a.FCStd", spreadsheet="s", alias="Alpha"),
+        ],
     }
-    _print_by_file_format(refs)
+    outputter = ReferenceOutputter(refs, {"a.FCStd", "b.FCStd"})
+    outputter.print_by_file()
     captured = capsys.readouterr()
     output = captured.out
     # Files should be in order: a.FCStd, b.FCStd
@@ -462,9 +455,10 @@ def test_by_file_sort_order(capsys: pytest.CaptureFixture[str]) -> None:
 
 def test_by_alias_sort_order(capsys: pytest.CaptureFixture[str]) -> None:
     """Test that --by-alias output is sorted by alias, file, then object."""
-    from fc_audit.cli import _print_by_alias_format
+    from fc_audit.output import ReferenceOutputter
     from fc_audit.reference_collector import Reference
 
+    # Construct unsorted input
     refs = {
         "Beta": [
             Reference(object_name="ObjB", expression="e1", filename="b.FCStd", spreadsheet="s", alias="Beta"),
@@ -476,7 +470,8 @@ def test_by_alias_sort_order(capsys: pytest.CaptureFixture[str]) -> None:
             Reference(object_name="ObjB", expression="e5", filename="b.FCStd", spreadsheet="s", alias="Alpha"),
         ],
     }
-    _print_by_alias_format(refs)
+    outputter = ReferenceOutputter(refs, {"a.FCStd", "b.FCStd"})
+    outputter.print_by_alias()
     captured = capsys.readouterr()
     output = captured.out
     # Aliases should be in order: Alpha, Beta

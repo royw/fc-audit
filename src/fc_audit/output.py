@@ -112,22 +112,20 @@ class ReferenceOutputter:
             return json.dumps({"message": "No alias references found"})
 
         # Convert references to serializable format
-        json_refs: dict[str, list[dict[str, str | None]]] = {}
+        result: dict[str, list[dict[str, str | None]]] = {}
         alias: str
         refs: list[Reference]
-        ref: Reference
         for alias, refs in self.references.items():
-            json_refs[alias] = []
-            for ref in refs:
-                json_refs[alias].append(
-                    {
-                        "filename": ref.filename,
-                        "object_name": ref.object_name,
-                        "expression": ref.expression,
-                        "spreadsheet": ref.spreadsheet,
-                    }
-                )
-        return json.dumps(json_refs, indent=2)
+            result[alias] = [
+                {
+                    "object_name": ref.object_name,
+                    "expression": ref.expression,
+                    "filename": ref.filename,
+                    "spreadsheet": ref.spreadsheet if ref.spreadsheet else None,
+                }
+                for ref in refs
+            ]
+        return json.dumps(result, indent=2)
 
     def print_by_object(self) -> None:
         """Print references grouped by object name."""
@@ -136,18 +134,24 @@ class ReferenceOutputter:
             return
 
         by_file_obj = self.format_by_object()
+        filename: str
+        obj_name: str
         for filename in sorted(by_file_obj):
             for obj_name in sorted(by_file_obj[filename]):
                 print(f"\nObject: {obj_name}")
                 print(f"  File: {filename}")
-                alias: str
-                refs: list[Reference]
-                ref: Reference
-                for alias in sorted(by_file_obj[filename][obj_name]):
-                    refs = by_file_obj[filename][obj_name][alias]
-                    for ref in refs:
-                        print(f"  Alias: {alias}")
-                        print(f"  Expression: {ref.expression}")
+                # Group by alias and expression
+                by_alias: dict[str, set[str]] = {}
+                for alias in by_file_obj[filename][obj_name]:
+                    by_alias[alias] = set()
+                    for ref in by_file_obj[filename][obj_name][alias]:
+                        by_alias[alias].add(ref.expression)
+
+                # Print grouped references
+                for alias in sorted(by_alias):
+                    print(f"    Alias: {alias}")
+                    for expr in sorted(by_alias[alias]):
+                        print(f"      Expression: {expr}")
 
     def print_by_file(self) -> None:
         """Print references grouped by file and alias."""
@@ -158,13 +162,23 @@ class ReferenceOutputter:
         by_file = self.format_by_file()
         for filename in sorted(by_file):
             print(f"\nFile: {filename}")
-            alias: str
-            ref: Reference
-            for alias in sorted(by_file[filename]):
-                print(f"  Alias: {alias}")
+            # Group by alias, then object, then expression
+            by_alias: dict[str, dict[str, set[str]]] = {}
+            for alias in by_file[filename]:
                 for ref in by_file[filename][alias]:
-                    print(f"    Object: {ref.object_name}")
-                    print(f"    Expression: {ref.expression}")
+                    if alias not in by_alias:
+                        by_alias[alias] = {}
+                    if ref.object_name not in by_alias[alias]:
+                        by_alias[alias][ref.object_name] = set()
+                    by_alias[alias][ref.object_name].add(ref.expression)
+
+            # Print grouped references
+            for alias in sorted(by_alias):
+                print(f"  Alias: {alias}")
+                for obj_name in sorted(by_alias[alias]):
+                    print(f"    Object: {obj_name}")
+                    for expr in sorted(by_alias[alias][obj_name]):
+                        print(f"      Expression: {expr}")
 
     def print_by_alias(self) -> None:
         """Print references grouped by alias name."""
@@ -176,10 +190,23 @@ class ReferenceOutputter:
         ref: Reference
         for alias in sorted(self.references):
             print(f"\nAlias: {alias}")
-            for ref in sorted(self.references[alias], key=lambda r: (r.filename or "", r.object_name)):
-                print(f"  File: {ref.filename}")
-                print(f"  Object: {ref.object_name}")
-                print(f"  Expression: {ref.expression}")
+            # Group by file, then object, then expression
+            by_file: dict[str, dict[str, set[str]]] = {}
+            for ref in self.references[alias]:
+                filename = ref.filename or ""
+                if filename not in by_file:
+                    by_file[filename] = {}
+                if ref.object_name not in by_file[filename]:
+                    by_file[filename][ref.object_name] = set()
+                by_file[filename][ref.object_name].add(ref.expression)
+
+            # Print grouped references
+            for filename in sorted(by_file):
+                print(f"  File: {filename}")
+                for obj_name in sorted(by_file[filename]):
+                    print(f"    Object: {obj_name}")
+                    for expr in sorted(by_file[filename][obj_name]):
+                        print(f"      Expression: {expr}")
 
     def print_empty_files(self) -> None:
         """Print list of files that have no references."""
@@ -195,4 +222,4 @@ class ReferenceOutputter:
         if empty_files:
             print("\nFiles with no references:")
             for filename in sorted(empty_files):
-                print(f"  {filename}")
+                print(f"Note: {filename} contains no spreadsheet references")

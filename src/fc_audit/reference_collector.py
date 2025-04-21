@@ -137,10 +137,18 @@ class ReferenceCollector:
         return (alias, ref)
 
     def _parse_reference(self, expr: str) -> str | None:
-        """Parse a reference from an expression."""
-        pattern: str = r"<<globals>>#<<params>>\.([^\s+\-*/()]+)"
-        match: Match[str] | None = re.search(pattern, expr)
-        return match.group(1) if match else None
+        """Parse a reference from an expression.
+
+        Handles both formats:
+        - <<globals>>#<<params>>.ALIAS
+        - <<params>>.ALIAS
+        """
+        patterns: list[str] = [r"<<globals>>#<<params>>\.([^\s+\-*/()]+)", r"<<params>>\.([^\s+\-*/()]+)"]
+        for pattern in patterns:
+            match: Match[str] | None = re.search(pattern, expr)
+            if match:
+                return match.group(1)
+        return None
 
     def _merge_references(self, new_refs: dict[str, list[Reference]]) -> None:
         """Merge new references into the existing references."""

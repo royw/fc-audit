@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from argparse import _SubParsersAction
 from collections.abc import Sequence
@@ -325,7 +324,7 @@ def print_empty_files(processed_files: set[str], references: dict[str, list[Refe
     if empty_files:
         filename: str
         for filename in sorted(empty_files):
-            logger.error(f"{filename} has no references")
+            logger.info(f"Note: {filename} contains no spreadsheet references")
 
 
 def print_references(references: dict[str, list[Reference]], output_format: str, processed_files: set[str]) -> None:
@@ -341,96 +340,10 @@ def print_references(references: dict[str, list[Reference]], output_format: str,
         print(outputter.to_json())
     elif output_format == "by_file":
         outputter.print_by_file()
+    elif output_format == "by_object":
+        outputter.print_by_object()
     else:  # by_alias
         outputter.print_by_alias()
-
-
-def _format_json_output(references: dict[str, list[Reference]]) -> None:
-    """Format and print references in JSON format.
-
-    Args:
-        references: Dictionary mapping alias names to lists of references
-    """
-    if not references:
-        print(json.dumps({"message": "No alias references found"}))
-        return
-
-    result: dict[str, list[dict[str, str | None]]] = {}
-    alias: str
-    refs: list[Reference]
-    for alias, refs in references.items():
-        result[alias] = [
-            {
-                "object_name": ref.object_name,
-                "expression": ref.expression,
-                "filename": ref.filename,
-                "spreadsheet": ref.spreadsheet if ref.spreadsheet else None,
-            }
-            for ref in refs
-        ]
-    print(json.dumps(result), end="")
-
-
-def _print_by_object_format(by_object: dict[str, dict[str, dict[str, list[Reference]]]]) -> None:
-    """Print references grouped by object.
-
-    Args:
-        by_object: References formatted by object
-    """
-    filename: str
-    obj_name: str
-    aliases: dict[str, list[Reference]]
-    alias: str
-    refs: list[Reference]
-    ref: Reference
-    for filename, objects in by_object.items():
-        for obj_name, aliases in objects.items():
-            print(f"\nObject: {obj_name}")
-            print(f"  File: {filename}")
-            for alias, refs in aliases.items():
-                print(f"  Alias: {alias}")
-                for ref in refs:
-                    print(f"  Expression: {ref.expression}")
-
-
-def _print_by_file_format(by_file: dict[str, dict[str, list[Reference]]]) -> None:
-    """Print references grouped by file, sorted by file, alias, then object."""
-    filename: str
-    aliases: dict[str, list[Reference]]
-    alias: str
-    refs: list[Reference]
-    ref: Reference
-    for filename in sorted(by_file):
-        aliases = by_file[filename]
-        print(f"\nFile: {filename}")
-        for alias in sorted(aliases):
-            refs = aliases[alias]
-            print(f"  Alias: {alias}")
-            # Sort refs by object_name
-            for ref in sorted(refs, key=lambda r: (str(r.object_name) if r.object_name is not None else "")):
-                print(f"    Object: {ref.object_name}")
-                print(f"    Expression: {ref.expression}")
-
-
-def _print_by_alias_format(references: dict[str, list[Reference]]) -> None:
-    """Print references grouped by alias, sorted by alias, file, then object name."""
-    alias: str
-    refs: list[Reference]
-    ref: Reference
-    for alias in sorted(references):
-        refs = references[alias]
-        print(f"\nAlias: {alias}")
-        # Sort refs by filename, then object_name
-        for ref in sorted(
-            refs,
-            key=lambda r: (
-                str(r.filename) if r.filename is not None else "",
-                str(r.object_name) if r.object_name is not None else "",
-            ),
-        ):
-            print(f"  File: {ref.filename}")
-            print(f"  Object: {ref.object_name}")
-            print(f"  Expression: {ref.expression}")
 
 
 def handle_get_references(args: argparse.Namespace, file_paths: list[Path] | None = None) -> int:
@@ -450,22 +363,17 @@ def handle_get_references(args: argparse.Namespace, file_paths: list[Path] | Non
         processed_files: set[str]
         references, processed_files = process_references(paths, args.aliases)
 
-        # Handle different output formats
-        if getattr(args, "json", False):
-            _format_json_output(references)
-            return 0
-        if getattr(args, "by_object", False):
-            _print_by_object_format(format_by_object(references))
-        elif getattr(args, "by_file", False):
-            _print_by_file_format(format_by_file(references))
-        else:  # by-alias (default)
-            _print_by_alias_format(references)
-
-        # Print summary if no references found
-        if not references:
-            print("\nNo alias references found")
-        # Always print empty files list
-        print_empty_files(processed_files, references)
+        # Handle output formats
+        output_format = (
+            "json"
+            if getattr(args, "json", False)
+            else "by_object"
+            if getattr(args, "by_object", False)
+            else "by_file"
+            if getattr(args, "by_file", False)
+            else "by_alias"
+        )
+        print_references(references, output_format, processed_files)
 
         return 0
     except InvalidFileError as e:

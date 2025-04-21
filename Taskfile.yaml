@@ -130,6 +130,11 @@ tasks:
       - task: build:wheel
       - task: build:sdist
 
+  sync:
+    desc: Sync all dependencies including dev dependencies from pyproject.toml
+    cmds:
+      - uv pip install --upgrade -e ".[dev]"
+
   ci:
     desc: Run all CI checks
     cmds:
