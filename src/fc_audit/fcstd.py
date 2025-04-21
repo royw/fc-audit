@@ -18,6 +18,7 @@ from .exceptions import (
     ReferenceError,
     XMLParseError,
 )
+from .reference_collector import Reference as BaseReference
 
 logger = logging.getLogger(__name__)
 
@@ -317,7 +318,7 @@ def get_expressions(filepath: Path) -> dict[str, str]:
 
 
 @dataclass
-class Reference:
+class Reference(BaseReference):
     """A reference to a spreadsheet cell in a FreeCAD document.
 
     Attributes:
@@ -327,12 +328,6 @@ class Reference:
         spreadsheet: Optional name of the spreadsheet containing the referenced cell
         alias: The alias name of the referenced cell (empty if not found)
     """
-
-    object_name: str
-    expression: str
-    filename: str | None = None
-    spreadsheet: str | None = None
-    alias: str = ""
 
 
 def parse_reference(expr: Any) -> str | None:

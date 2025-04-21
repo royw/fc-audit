@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import argparse
-import errno
 import fnmatch
 import json
-import os
 import sys
 from argparse import _SubParsersAction
 from collections.abc import Iterable, Sequence
@@ -14,137 +12,11 @@ from pathlib import Path
 
 from loguru import logger
 
-from .exceptions import (
-    InvalidFileError,
-    XMLParseError,
-)
-from .fcstd import (
-    get_cell_aliases,
-    get_document_properties,
-    is_fcstd_file,
-)
+from .exceptions import InvalidFileError, XMLParseError
+from .fcstd import get_cell_aliases, get_document_properties, is_fcstd_file
+from .logging import setup_logging
 from .output import ReferenceOutputter
 from .reference_collector import Reference, ReferenceCollector
-
-# Sadly, Python fails to provide the following magic number for us.
-ERROR_INVALID_NAME = 123
-"""
-Windows-specific error code indicating an invalid pathname.
-
-See Also
-----------
-https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes--0-499-
-    Official listing of all such codes.
-"""
-
-
-def is_pathname_valid(pathname: str) -> bool:
-    """
-    `True` if the passed pathname is a valid pathname for the current OS;
-    `False` otherwise.
-    """
-    # If this pathname is either not a string or is but is empty, this pathname
-    # is invalid.
-    try:
-        if not isinstance(pathname, str) or not pathname:
-            return False
-
-        # Strip this pathname's Windows-specific drive specifier (e.g., `C:\`)
-        # if any. Since Windows prohibits path components from containing `:`
-        # characters, failing to strip this `:`-suffixed prefix would
-        # erroneously invalidate all valid absolute Windows pathnames.
-        _, pathname = os.path.splitdrive(pathname)
-
-        # Directory guaranteed to exist. If the current OS is Windows, this is
-        # the drive to which Windows was installed (e.g., the "%HOMEDRIVE%"
-        # environment variable); else, the typical root directory.
-        root_dirname = os.environ.get("HOMEDRIVE", "C:") if sys.platform == "win32" else os.path.sep
-        assert Path(root_dirname).is_dir()  # ...Murphy and her ironclad Law
-
-        # Append a path separator to this directory if needed.
-        root_dirname = root_dirname.rstrip(os.path.sep) + os.path.sep
-
-        # Test whether each path component split from this pathname is valid or
-        # not, ignoring non-existent and non-readable path components.
-        for pathname_part in pathname.split(os.path.sep):
-            try:
-                os.lstat(root_dirname + pathname_part)
-            # If an OS-specific exception is raised, its error code
-            # indicates whether this pathname is valid or not. Unless this
-            # is the case, this exception implies an ignorable kernel or
-            # filesystem complaint (e.g., path not found or inaccessible).
-            #
-            # Only the following exceptions indicate invalid pathnames:
-            #
-            # * Instances of the Windows-specific "WindowsError" class
-            #   defining the "winerror" attribute whose value is
-            #   "ERROR_INVALID_NAME". Under Windows, "winerror" is more
-            #   fine-grained and hence useful than the generic "errno"
-            #   attribute. When a too-long pathname is passed, for example,
-            #   "errno" is "ENOENT" (i.e., no such file or directory) rather
-            #   than "ENAMETOOLONG" (i.e., file name too long).
-            # * Instances of the cross-platform "OSError" class defining the
-            #   generic "errno" attribute whose value is either:
-            #   * Under most POSIX-compatible OSes, "ENAMETOOLONG".
-            #   * Under some edge-case OSes (e.g., SunOS, *BSD), "ERANGE".
-            except OSError as exc:
-                if hasattr(exc, "winerror"):
-                    if exc.winerror == ERROR_INVALID_NAME:
-                        return False
-                elif exc.errno in {errno.ENAMETOOLONG, errno.ERANGE}:
-                    return False
-    # If a "TypeError" exception was raised, it almost certainly has the
-    # error message "embedded NUL character" indicating an invalid pathname.
-    except TypeError:
-        return False
-    # If no exception was raised, all path components and hence this
-    # pathname itself are valid. (Praise be to the curmudgeonly python.)
-    else:
-        return True
-    # If any other exception was raised, this is an unrelated fatal issue
-    # (e.g., a bug). Permit this exception to unwind the call stack.
-    #
-    # Did we mention this should be shipped with Python already?
-
-
-def setup_logging(log_file: str | None = None, verbose: bool = False) -> None:
-    """Configure logging settings.
-
-    Args:
-        log_file: Optional path to log file
-        verbose: If True, set log level to DEBUG
-    """
-    level: str = "DEBUG" if verbose else "INFO"
-
-    # Remove default handler
-    logger.remove()
-
-    # Add file handler if specified
-    if log_file:
-        try:
-            # Create parent directory if it doesn't exist
-            if not is_pathname_valid(log_file):
-                error_msg = f"Invalid log file path: {log_file}"
-                raise ValueError(error_msg)
-            log_path: Path = Path(log_file)
-            log_path.parent.mkdir(parents=True, exist_ok=True)
-            logger.add(log_file, rotation="10 MB", level=level)
-        except Exception as e:
-            # Print error directly to stderr before setting up logger
-            print(f"Failed to set up log file: {e}", file=sys.stderr, flush=True)
-            # Add stderr handler after error
-            logger.add(sys.stderr, colorize=False, level=level)
-            # Log startup message
-            logger.info("Starting fc-audit")
-            logger.info(f"Log level: {level}")
-            return
-
-    # Add stderr handler
-    logger.add(sys.stderr, colorize=False, level=level)
-
-    # Log startup message
-    logger.info("Starting fc-audit")
-    logger.info(f"Log level: {level}")
 
 
 def parse_args(argv: Sequence[str | Path] | None = None) -> argparse.Namespace:
@@ -599,17 +471,17 @@ def valid_files(files: list[Path]) -> Iterable[Path]:
     """
     for path in files:
         if not path.exists():
-            logger.error(f"{path}: File not found")
+            logger.error("%s: File not found", path)
             continue
         if not path.is_file():
-            logger.error(f"{path}: Not a file")
+            logger.error("%s: Not a file", path)
             continue
         try:
             if not is_fcstd_file(path):
-                logger.error(f"{path}: Not a valid FCStd file")
+                logger.error("%s: Not a valid FCStd file", path)
                 continue
         except Exception as e:
-            logger.error(f"{path}: Error checking file: {e}")
+            logger.error("%s: Error checking file: %s", path, e)
             continue
         yield path
 
@@ -641,10 +513,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             return handle_get_aliases(args, files)
         if args.command == "references":
             return handle_get_references(args, files)
-        logger.error(f"Unknown command: {args.command}")
+        logger.error("Unknown command: %s", args.command)
         return 1
     except Exception as e:
-        logger.error(f"Error: {e}")
+        logger.error("Error: %s", e)
         return 1
 
 
