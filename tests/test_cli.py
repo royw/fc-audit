@@ -280,12 +280,12 @@ def test_references_multiple_files(capsys: pytest.CaptureFixture[str]) -> None:
     2. References are merged correctly
     3. Output format is correct"""
 
-    main(["references", str(DATA_DIR / "Test1.FCStd"), str(DATA_DIR / "Test2.FCStd")])
+    main(["references", str(DATA_DIR / "Test1.FCStd"), str(DATA_DIR / "test3.FCStd")])
     captured = capsys.readouterr()
 
     # Check output format
     output = captured.out
-    assert "File: Test1.FCStd" in output or "File: Test2.FCStd" in output
+    assert "File: Test1.FCStd" in output or "File: test3.FCStd" in output
 
 
 def test_references_empty_file(capsys: pytest.CaptureFixture[str]) -> None:
@@ -312,17 +312,33 @@ def test_setup_logging_error(capsys: pytest.CaptureFixture[str], tmp_path: Path)
     Verifies that:
     1. Invalid log file paths are handled gracefully
     2. Appropriate error messages are shown
-    3. Default logging still works"""
+    3. Default logging still works
+    4. Invalid log file permissions are handled
+    """
+    # Remove existing handlers
+    logger.remove()
 
-    # Use a directory as a log file path to force an error
-    log_dir = tmp_path / "log_dir"
-    log_dir.mkdir()
-    log_file = log_dir / "file.log" / "bad"
-    setup_logging(str(log_file))
-    logger.info("Test error message")
+    # Test with invalid log file path
+    invalid_path = tmp_path / "non\x00existent" / "test.log"
+    setup_logging(str(invalid_path))
     captured = capsys.readouterr()
-    # Accept either error or normal output since logging fallback may differ
-    assert ("Failed to set up log file" in captured.err) or ("Test error message" in captured.err)
+    assert "Failed to set up log file" in captured.err
+
+    # Verify default logging still works
+    logger.info("Test message")
+    captured = capsys.readouterr()
+    assert "Test message" in captured.err
+
+    # Test with read-only directory
+    readonly_dir = tmp_path / "readonly"
+    readonly_dir.mkdir()
+    readonly_dir.chmod(0o555)  # Read and execute only
+    readonly_log = readonly_dir / "test.log"
+    setup_logging(str(readonly_log))
+    logger.info("Test message 2")
+    captured = capsys.readouterr()
+    assert "Failed to set up log file" in captured.err
+    assert "Test message 2" in captured.err
 
     # Test default logging works without log file
     main(["references", "--json", str(DATA_DIR / "Test1.FCStd"), str(DATA_DIR / "Empty.FCStd")])
@@ -330,63 +346,160 @@ def test_setup_logging_error(capsys: pytest.CaptureFixture[str], tmp_path: Path)
     assert "Starting fc-audit" in captured.err
 
 
-def test_handle_get_properties_error(tmp_path: Path) -> None:
-    """Test handle_get_properties with error."""
-    # Create an invalid FCStd file
+def test_handle_get_properties_error(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """Test handle_get_properties with error.
+    Verifies:
+    1. Invalid file handling
+    2. Empty file handling
+    3. Multiple file handling
+    4. Error message output
+    """
+    # Test with invalid file
     invalid_file = tmp_path / "invalid.FCStd"
     invalid_file.write_text("Not a valid FCStd file")
-    args = argparse.Namespace(files=[invalid_file])
-    result = handle_get_properties(args)
-    assert result == 1
+    args = parse_args(["properties", str(invalid_file)])
+    assert handle_get_properties(args, args.files) == 1
+    captured = capsys.readouterr()
+    assert "is not a valid FCStd file" in captured.err
+
+    # Test with empty file
+    empty_file = tmp_path / "empty.FCStd"
+    empty_file.write_text("")
+    args = parse_args(["properties", str(empty_file)])
+    assert handle_get_properties(args, args.files) == 1
+    captured = capsys.readouterr()
+    assert "is not a valid FCStd file" in captured.err
+
+    # Test with multiple files including invalid ones
+    args = parse_args(["properties", str(DATA_DIR / "Test1.FCStd"), str(invalid_file)])
+    assert handle_get_properties(args, args.files) == 0
+    captured = capsys.readouterr()
+    assert "Properties found for" in captured.out
+    assert "is not a valid FCStd file" in captured.err
 
 
 def test_handle_get_aliases_error(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    """Test handle_get_aliases with error."""
-    # Create an invalid FCStd file
-    invalid_file = tmp_path / "invalid.FCStd"
-    invalid_file.write_text("Not a valid FCStd file")
-    args = argparse.Namespace(files=[invalid_file])
-    result = handle_get_aliases(args)
-    assert result == 1
+    """Test handle_get_aliases with error.
+    Verifies:
+    1. Invalid file handling
+    2. Empty file handling
+    3. Multiple file handling
+    4. Alias filtering
+    5. Error message output
+    """
+
+    # Test with valid file
+    args = parse_args(["aliases", str(DATA_DIR / "Test1.FCStd")])
+    assert handle_get_aliases(args, args.files) == 0
     captured = capsys.readouterr()
-    assert "No cell aliases found" in captured.out
+    assert "Aliases found for" in captured.out
+    assert "is not a valid FCStd file" not in captured.err
 
-
-def test_handle_get_references_error(tmp_path: Path) -> None:
-    """Test handle_get_references with error."""
-    # Create an invalid FCStd file
+    # Test with invalid file
     invalid_file = tmp_path / "invalid.FCStd"
     invalid_file.write_text("Not a valid FCStd file")
-    args = argparse.Namespace(files=[invalid_file])
-    result = handle_get_references(args)
-    assert result == 1
+    args = parse_args(["aliases", str(invalid_file)])
+    assert handle_get_aliases(args, args.files) == 1
+    captured = capsys.readouterr()
+    assert "is not a valid FCStd file" in captured.err
+
+    # Test with empty file
+    args = parse_args(["aliases", str(DATA_DIR / "Empty.FCStd")])
+    assert handle_get_aliases(args, args.files) == 1
+    captured = capsys.readouterr()
+    assert "No aliases found" in captured.out
+
+    # Test with multiple files including invalid ones
+    args = parse_args(["aliases", str(DATA_DIR / "Test1.FCStd"), str(invalid_file)])
+    assert handle_get_aliases(args, args.files) == 0
+    captured = capsys.readouterr()
+    assert "Aliases found for" in captured.out
+    assert "is not a valid FCStd file" in captured.err
+
+    # Test with alias filtering
+    args = parse_args(["aliases", "--aliases", "Length,Width", str(DATA_DIR / "Test1.FCStd")])
+    assert handle_get_aliases(args, args.files) == 0
+    captured = capsys.readouterr()
+    assert "Length" in captured.out
+    assert "Width" in captured.out
+    assert "Height" not in captured.out
 
 
 def test_main_error(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    """Test main function error handling."""
-    # Pass an invalid command (should raise SystemExit with code 2)
+    """Test main function error handling.
+    Verifies:
+    1. Invalid command handling
+    2. Invalid file handling
+    3. Empty file handling
+    4. Multiple file handling
+    5. Invalid alias pattern
+    6. Invalid log file
+    7. Invalid format combinations
+    8. System exit codes
+    9. Error message output
+    """
+    # Test with invalid command
     with pytest.raises(SystemExit) as excinfo:
         main(["invalid-command"])
     assert excinfo.value.code == 2
     captured = capsys.readouterr()
-    assert "Unknown command" in captured.err or "invalid choice" in captured.err
+    assert "invalid choice" in captured.err.lower()
 
     # Test with missing files
     with pytest.raises(SystemExit) as excinfo:
         main(["references"])
     assert excinfo.value.code == 2
 
-    # Test with error in command handler
+    # Test with invalid file
     invalid_file = tmp_path / "invalid.FCStd"
     invalid_file.write_text("Not a valid FCStd file")
-    main(["references", str(invalid_file)])
+    assert main(["references", str(invalid_file)]) == 1
     captured = capsys.readouterr()
-    assert "is not a valid FCStd file" in captured.err
+    assert "Not a valid FCStd file" in captured.err
+    assert "No valid files provided" in captured.err
+
+    # Test with empty file
+    empty_file = tmp_path / "empty.FCStd"
+    empty_file.write_text("")
+    assert main(["references", str(empty_file)]) == 1
+    captured = capsys.readouterr()
+    assert "Not a valid FCStd file" in captured.err
+    assert "No valid files provided" in captured.err
+
+    # Test with multiple files including invalid ones
+    assert main(["references", str(DATA_DIR / "Test1.FCStd"), str(invalid_file)]) == 0
+    captured = capsys.readouterr()
+    assert "Alias:" in captured.out
+    assert "Not a valid FCStd file" in captured.err
+
+    # Test with invalid alias pattern
+    assert main(["references", "--aliases", "[", str(DATA_DIR / "Test1.FCStd")]) == 1
+    captured = capsys.readouterr()
+    assert "No alias references found" in captured.out
+
+    # Test with invalid log file
+    invalid_log = tmp_path / "in\x00valid" / "log.txt"
+    assert main(["--log-file", str(invalid_log), "references", str(DATA_DIR / "Test1.FCStd")]) == 0
+    captured = capsys.readouterr()
+    assert "Failed to set up log file" in captured.err
+    assert "Alias:" in captured.out
+
+    # Test with invalid format combination
+    with pytest.raises(SystemExit) as excinfo:
+        main(["references", "--json", "--csv", str(DATA_DIR / "Test1.FCStd")])
+    assert excinfo.value.code == 2
+    captured = capsys.readouterr()
+    assert "not allowed with argument" in captured.err.lower()
 
     # Test with None args
     with pytest.raises(SystemExit) as excinfo:
         main(None)
     assert excinfo.value.code == 2
+
+    # Test with verbose flag
+    assert main(["--verbose", "references", str(DATA_DIR / "Test1.FCStd")]) == 0
+    captured = capsys.readouterr()
+    assert "DEBUG" in captured.err
 
 
 def test_format_by_object_edge_cases() -> None:
@@ -575,9 +688,19 @@ def test_references_csv_sort_order(capsys: pytest.CaptureFixture[str]) -> None:
 def test_references_format_conflict() -> None:
     """Test that incompatible format options raise an error."""
     with pytest.raises(SystemExit):
-        parse_args(["references", "--csv", "--json", "file.FCStd"])
+        parse_args(["references", "--by-alias", "--by-object", "test.FCStd"])
+
     with pytest.raises(SystemExit):
-        parse_args(["references", "--csv", "--by-file", "file.FCStd"])
+        parse_args(["references", "--json", "--csv", "test.FCStd"])
+
+    with pytest.raises(SystemExit):
+        parse_args(["references", "--by-file", "--by-object", "test.FCStd"])
+
+    with pytest.raises(SystemExit):
+        parse_args(["references", "--by-file", "--json", "test.FCStd"])
+
+    with pytest.raises(SystemExit):
+        parse_args(["references", "--by-alias", "--csv", "test.FCStd"])
 
 
 def test_references_invalid_files(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -596,14 +719,14 @@ def test_references_invalid_files(tmp_path: Path, capsys: pytest.CaptureFixture[
         by_alias=False,
     )
     # Should exit with error code 1 and print error message
-    result = handle_get_references(args)
+    result = handle_get_references(args, args.files)
     assert result == 1
     captured = capsys.readouterr()
     assert "No alias references found" in captured.out
 
     args.files = [invalid]
     # Should exit with error code 1 and print error message
-    result = handle_get_references(args)
+    result = handle_get_references(args, args.files)
     assert result == 1
     captured = capsys.readouterr()
     assert "No alias references found" in captured.out

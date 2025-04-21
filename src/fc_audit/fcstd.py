@@ -10,6 +10,7 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from re import Match
+from typing import Any
 
 from .exceptions import (
     ExpressionError,
@@ -112,11 +113,13 @@ def get_cell_aliases(filepath: Path) -> set[str]:
         content: str = _read_xml_content(filepath)
         root: ET.Element = _parse_xml_content(content)
 
-        # Find all Cell elements with aliases
+        # Find all Cell elements with non-empty aliases
         aliases: set[str] = set()
         for cell in root.findall(".//Cell[@alias]"):
             try:
-                aliases.add(cell.attrib["alias"])
+                alias = cell.attrib["alias"]
+                if alias:  # Skip empty aliases
+                    aliases.add(alias)
             except KeyError:
                 continue
 
@@ -332,23 +335,46 @@ class Reference:
     alias: str = ""
 
 
-def parse_reference(expr: str) -> str | None:
+def parse_reference(expr: Any) -> str | None:
     """Parse a reference from an expression.
 
     Format: [<<filename>>]#[<<spreadsheet>>].alias
 
     Args:
-        expr: Expression to parse
+        expr: Expression to parse, can be a string or an XML Element
 
     Returns:
         Alias name if found, None otherwise
+
+    Raises:
+        XMLParseError: If expr is None or not a string/XML Element
     """
+    if expr is None:
+        error_msg = "Expression cannot be None"
+        raise XMLParseError(error_msg)
+
+    if isinstance(expr, ET.Element):
+        # For XML Elements, we expect an ExpressionEngine attribute
+        if "ExpressionEngine" not in expr.attrib:
+            error_msg = "XML Element must have an ExpressionEngine attribute"
+            raise XMLParseError(error_msg)
+        expr_str = expr.get("ExpressionEngine", "")
+    elif isinstance(expr, str):
+        expr_str = expr
+    else:
+        error_msg = f"Invalid expression type: {type(expr)}"
+        raise XMLParseError(error_msg)
+
+    # Return None for empty strings or expressions that don't match the pattern
+    if not expr_str.strip():
+        return None
+
     # Pattern for optional <<n>> or name followed by # then optional <<n>> or name then . then name
     pattern: str = r"<<globals>>#<<params>>\.([^\s+\-*/()]+)"
-    match: Match[str] | None = re.search(pattern, expr)
-    if match:
+    match_obj: Match[str] | None = re.search(pattern, expr_str)
+    if match_obj:
         # The alias is always the first group
-        return match.group(1)
+        return match_obj.group(1)
     return None
 
 

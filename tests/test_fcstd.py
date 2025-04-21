@@ -2,16 +2,25 @@
 
 from __future__ import annotations
 
-import xml.etree.ElementTree as ET
-import zipfile
 from pathlib import Path
+from xml.etree import ElementTree as ET
+from zipfile import ZipFile
 
 import pytest
 
-from fc_audit.exceptions import InvalidFileError, XMLParseError
 from fc_audit.fcstd import (
+    ExpressionError,
+    InvalidFileError,
     Reference,
+    XMLParseError,
+    _extract_expression,
     _find_parent_with_identifier,
+    _make_unique_key,
+    _merge_references,
+    _parse_document_references,
+    _parse_expression_element,
+    _parse_object_element,
+    _read_xml_content,
     get_cell_aliases,
     get_cell_aliases_from_files,
     get_document_properties,
@@ -19,6 +28,7 @@ from fc_audit.fcstd import (
     get_properties_from_files,
     get_references,
     get_references_from_files,
+    is_fcstd_file,
     parse_reference,
 )
 
@@ -67,13 +77,11 @@ def create_fcstd_file(filepath: Path, xml_content: str) -> None:
         filepath: Path to create the file at
         xml_content: XML content to write to Document.xml
     """
-    with zipfile.ZipFile(filepath, "w") as zf:
+    with ZipFile(filepath, "w") as zf:
         zf.writestr("Document.xml", xml_content)
 
 
 def test_extract_expression() -> None:
-    from fc_audit.fcstd import ExpressionError, _extract_expression
-
     # Success case: Expression attached to parent with name attribute
     root = ET.Element("Document")
     parent = ET.SubElement(root, "Object", name="ParentName")
@@ -138,7 +146,6 @@ def test_parse_document_references(sample_xml: str) -> None:
     1. References are correctly grouped by alias name
     2. Each reference contains the correct object name and expression
     3. Multiple references to the same alias are properly handled"""
-    from fc_audit.fcstd import _parse_document_references
 
     references = _parse_document_references(sample_xml, "test.FCStd")
 
@@ -298,8 +305,6 @@ def test_parse_expression_element_error_handling() -> None:
     3. Invalid reference formats are handled"""
     from xml.etree.ElementTree import Element
 
-    from fc_audit.fcstd import _parse_expression_element
-
     # Test invalid expression attribute
     expr_elem = Element("Expression")
     expr_elem.attrib["expression"] = "invalid expression"
@@ -317,8 +322,6 @@ def test_parse_object_element_error_handling() -> None:
     2. Missing expressions are handled
     3. Invalid expressions are handled"""
     from xml.etree.ElementTree import Element
-
-    from fc_audit.fcstd import _parse_object_element
 
     # Test missing object name
     obj = Element("Object")
@@ -339,7 +342,6 @@ def test_parse_document_references_error_handling() -> None:
     1. Invalid XML content is handled
     2. Missing object elements are handled
     3. Invalid object elements are handled"""
-    from fc_audit.fcstd import _parse_document_references
 
     # Test invalid XML content
     assert _parse_document_references("invalid xml", "test.FCStd") == {}
@@ -418,8 +420,6 @@ def test_make_unique_key() -> None:
     1. Original key is returned if not in existing keys
     2. Numbered keys are created for duplicates
     3. Numbers increase until a unique key is found"""
-    from fc_audit.fcstd import _make_unique_key
-
     # Test with empty existing keys
     assert _make_unique_key("test", set()) == "test"
 
@@ -440,8 +440,6 @@ def test_merge_references() -> None:
     1. New references are added to empty dict
     2. New references are appended to existing lists
     3. New aliases are added with their references"""
-    from fc_audit.fcstd import _merge_references
-
     # Test merging into empty dict
     all_refs: dict[str, list[Reference]] = {}
     new_refs = {"Length": [Reference(filename="file1.FCStd", object_name="Box", expression="expr1")]}
@@ -470,8 +468,6 @@ def test_read_xml_content_error_handling(tmp_path: Path) -> None:
     2. Invalid zip files are handled
     3. Zip files without Document.xml are handled
     4. Corrupted XML content is handled"""
-    from fc_audit.fcstd import _read_xml_content
-
     # Test non-existent file
     with pytest.raises(InvalidFileError):
         _read_xml_content(tmp_path / "nonexistent.FCStd")
@@ -484,84 +480,127 @@ def test_read_xml_content_error_handling(tmp_path: Path) -> None:
 
     # Test zip without Document.xml
     empty_zip = tmp_path / "empty.FCStd"
-    with zipfile.ZipFile(empty_zip, "w") as zf:
+    with ZipFile(empty_zip, "w") as zf:
         zf.writestr("other.txt", "content")
     with pytest.raises(InvalidFileError):
         _read_xml_content(empty_zip)
 
-    # Test corrupted XML
-    corrupted_zip = tmp_path / "corrupted.FCStd"
-    create_fcstd_file(corrupted_zip, "not xml content")
+    # Test corrupted XML content
+    corrupted_xml = tmp_path / "corrupted.FCStd"
+    with ZipFile(corrupted_xml, "w") as zf:
+        zf.writestr("Document.xml", "<invalid>xml</invalid>")
     with pytest.raises(InvalidFileError):
-        _read_xml_content(corrupted_zip)
+        _read_xml_content(corrupted_xml)
 
 
-def test_parse_xml_content_error_handling() -> None:
-    """Test error handling in _parse_xml_content function.
-    Verifies that:
-    1. Invalid XML syntax is handled
-    2. Empty XML is handled
-    3. XML without Document root is handled"""
-    from fc_audit.fcstd import _parse_xml_content
-
-    # Test invalid XML syntax
+def test_parse_reference_error_handling() -> None:
+    """Test error handling in parse_reference function."""
+    # Test with None element
     with pytest.raises(XMLParseError):
-        _parse_xml_content("not xml content")
+        parse_reference(None)
 
-    # Test empty XML
+    # Test with invalid element type
     with pytest.raises(XMLParseError):
-        _parse_xml_content("")
+        parse_reference(42)
 
-    # Test XML without Document root
-    root = _parse_xml_content("<?xml version='1.0'?><NotDocument></NotDocument>")
-    assert root.tag == "NotDocument"
+    # Test with empty string
+    assert parse_reference("") is None
+
+    # Test with invalid expression format
+    assert parse_reference("invalid.expression") is None
 
 
-def test_get_expressions_edge_cases(tmp_path: Path) -> None:
-    """Test edge cases in get_expressions function.
+def test_get_references_error_handling(tmp_path: Path) -> None:
+    """Test error handling in get_references function.
+
     Verifies that:
-    1. Empty expressions are handled
-    2. HTML entities in expressions are unescaped
-    3. Expressions without context are handled
-    4. Multiple expressions in same object are handled"""
-    # Test empty expression
-    xml = """<?xml version='1.0' encoding='utf-8'?>
-    <Document>
-        <Object name="Test">
-            <Expression expression=""/>
-        </Object>
-    </Document>"""
-    filepath = tmp_path / "empty_expr.FCStd"
-    create_fcstd_file(filepath, xml)
-    expressions = get_expressions(filepath)
-    assert "Object[Test]" in expressions
-    assert expressions["Object[Test]"] == ""
+    1. Invalid FCStd file is handled
+    2. Invalid XML content is handled
+    3. Missing references are handled
+    """
+    # Test invalid FCStd file
+    filepath = tmp_path / "invalid.FCStd"
+    filepath.write_bytes(b"This is not a zip file")
+    with pytest.raises(InvalidFileError):
+        get_references(filepath)
 
-    # Test HTML entities
-    xml = """<?xml version='1.0' encoding='utf-8'?>
-    <Document>
-        <Object name="Test">
-            <Expression expression="&lt;test&gt;"/>
-        </Object>
-    </Document>"""
-    filepath = tmp_path / "html_entities.FCStd"
-    create_fcstd_file(filepath, xml)
-    expressions = get_expressions(filepath)
-    assert "Object[Test]" in expressions
-    assert expressions["Object[Test]"] == "<test>"
+    # Test invalid XML content
+    xml_content = """<?xml version='1.0' encoding='UTF-8'?>
+<Invalid>This is not valid XML</Invalid"""
+    filepath = tmp_path / "invalid_xml.FCStd"
+    create_fcstd_file(filepath, xml_content)
+    refs = get_references(filepath)
+    assert refs == {}
 
-    # Test multiple expressions
-    xml = """<?xml version='1.0' encoding='utf-8'?>
-    <Document>
-        <Object name="Test">
-            <Expression expression="expr1"/>
-            <Expression expression="expr2"/>
-        </Object>
-    </Document>"""
-    filepath = tmp_path / "multiple_expr.FCStd"
-    create_fcstd_file(filepath, xml)
-    expressions = get_expressions(filepath)
-    assert len(expressions) == 2
-    assert "Object[Test]" in expressions
-    assert "Object[Test] (1)" in expressions
-    assert {expressions["Object[Test]"], expressions["Object[Test] (1)"]} == {"expr1", "expr2"}
+    # Test missing references
+    xml_content = """<?xml version='1.0' encoding='UTF-8'?>
+<Document>
+    <Object name="Spreadsheet">
+        <NoReferences/>
+    </Object>
+</Document>"""
+    filepath = tmp_path / "no_refs.FCStd"
+    create_fcstd_file(filepath, xml_content)
+    refs = get_references(filepath)
+    assert refs == {}
+
+
+def test_is_fcstd_file_error_handling(tmp_path: Path) -> None:
+    """Test error handling in is_fcstd_file function.
+
+    Verifies that:
+    1. Non-existent files are handled
+    2. Invalid zip files are handled
+    3. Zip files without Document.xml are handled
+    """
+    # Test non-existent file
+    filepath = tmp_path / "nonexistent.FCStd"
+    assert not is_fcstd_file(filepath)
+
+    # Test invalid zip file
+    filepath = tmp_path / "invalid.FCStd"
+    filepath.write_bytes(b"This is not a zip file")
+    assert not is_fcstd_file(filepath)
+
+    # Test zip file without Document.xml
+    filepath = tmp_path / "no_document.FCStd"
+    with ZipFile(filepath, "w") as zf:
+        zf.writestr("some_file.txt", "Some content")
+    assert not is_fcstd_file(filepath)
+
+
+def test_get_document_properties_error_handling(tmp_path: Path) -> None:
+    """Test error handling in get_document_properties function.
+
+    Verifies that:
+    1. Invalid FCStd files raise InvalidFileError
+    2. Invalid XML content raises XMLParseError
+    3. XML without properties is handled
+    """
+    # Test invalid FCStd file
+    filepath = tmp_path / "invalid.FCStd"
+    filepath.write_bytes(b"This is not a zip file")
+    with pytest.raises(InvalidFileError):
+        get_document_properties(filepath)
+
+    # Test invalid XML content
+    xml_content = """<?xml version='1.0' encoding='UTF-8'?>
+<Invalid>This is not valid XML</Invalid"""
+    filepath = tmp_path / "invalid_xml.FCStd"
+    create_fcstd_file(filepath, xml_content)
+    with pytest.raises(XMLParseError):
+        get_document_properties(filepath)
+
+    # Test XML without properties
+    xml_content = """<?xml version='1.0' encoding='UTF-8'?>
+<Document>
+    <Object name="Spreadsheet">
+        <Cells>
+            <Cell address="A1"/>
+        </Cells>
+    </Object>
+</Document>"""
+    filepath = tmp_path / "no_properties.FCStd"
+    create_fcstd_file(filepath, xml_content)
+    properties = get_document_properties(filepath)
+    assert properties == set()

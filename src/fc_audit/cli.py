@@ -3,20 +3,108 @@
 from __future__ import annotations
 
 import argparse
+import errno
+import fnmatch
+import json
+import os
 import sys
 from argparse import _SubParsersAction
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 
 from loguru import logger
 
-from .exceptions import InvalidFileError, XMLParseError
+from .exceptions import (
+    InvalidFileError,
+    XMLParseError,
+)
 from .fcstd import (
     get_cell_aliases,
     get_document_properties,
+    is_fcstd_file,
 )
 from .output import ReferenceOutputter
 from .reference_collector import Reference, ReferenceCollector
+
+# Sadly, Python fails to provide the following magic number for us.
+ERROR_INVALID_NAME = 123
+"""
+Windows-specific error code indicating an invalid pathname.
+
+See Also
+----------
+https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes--0-499-
+    Official listing of all such codes.
+"""
+
+
+def is_pathname_valid(pathname: str) -> bool:
+    """
+    `True` if the passed pathname is a valid pathname for the current OS;
+    `False` otherwise.
+    """
+    # If this pathname is either not a string or is but is empty, this pathname
+    # is invalid.
+    try:
+        if not isinstance(pathname, str) or not pathname:
+            return False
+
+        # Strip this pathname's Windows-specific drive specifier (e.g., `C:\`)
+        # if any. Since Windows prohibits path components from containing `:`
+        # characters, failing to strip this `:`-suffixed prefix would
+        # erroneously invalidate all valid absolute Windows pathnames.
+        _, pathname = os.path.splitdrive(pathname)
+
+        # Directory guaranteed to exist. If the current OS is Windows, this is
+        # the drive to which Windows was installed (e.g., the "%HOMEDRIVE%"
+        # environment variable); else, the typical root directory.
+        root_dirname = os.environ.get("HOMEDRIVE", "C:") if sys.platform == "win32" else os.path.sep
+        assert Path(root_dirname).is_dir()  # ...Murphy and her ironclad Law
+
+        # Append a path separator to this directory if needed.
+        root_dirname = root_dirname.rstrip(os.path.sep) + os.path.sep
+
+        # Test whether each path component split from this pathname is valid or
+        # not, ignoring non-existent and non-readable path components.
+        for pathname_part in pathname.split(os.path.sep):
+            try:
+                os.lstat(root_dirname + pathname_part)
+            # If an OS-specific exception is raised, its error code
+            # indicates whether this pathname is valid or not. Unless this
+            # is the case, this exception implies an ignorable kernel or
+            # filesystem complaint (e.g., path not found or inaccessible).
+            #
+            # Only the following exceptions indicate invalid pathnames:
+            #
+            # * Instances of the Windows-specific "WindowsError" class
+            #   defining the "winerror" attribute whose value is
+            #   "ERROR_INVALID_NAME". Under Windows, "winerror" is more
+            #   fine-grained and hence useful than the generic "errno"
+            #   attribute. When a too-long pathname is passed, for example,
+            #   "errno" is "ENOENT" (i.e., no such file or directory) rather
+            #   than "ENAMETOOLONG" (i.e., file name too long).
+            # * Instances of the cross-platform "OSError" class defining the
+            #   generic "errno" attribute whose value is either:
+            #   * Under most POSIX-compatible OSes, "ENAMETOOLONG".
+            #   * Under some edge-case OSes (e.g., SunOS, *BSD), "ERANGE".
+            except OSError as exc:
+                if hasattr(exc, "winerror"):
+                    if exc.winerror == ERROR_INVALID_NAME:
+                        return False
+                elif exc.errno in {errno.ENAMETOOLONG, errno.ERANGE}:
+                    return False
+    # If a "TypeError" exception was raised, it almost certainly has the
+    # error message "embedded NUL character" indicating an invalid pathname.
+    except TypeError:
+        return False
+    # If no exception was raised, all path components and hence this
+    # pathname itself are valid. (Praise be to the curmudgeonly python.)
+    else:
+        return True
+    # If any other exception was raised, this is an unrelated fatal issue
+    # (e.g., a bug). Permit this exception to unwind the call stack.
+    #
+    # Did we mention this should be shipped with Python already?
 
 
 def setup_logging(log_file: str | None = None, verbose: bool = False) -> None:
@@ -26,25 +114,37 @@ def setup_logging(log_file: str | None = None, verbose: bool = False) -> None:
         log_file: Optional path to log file
         verbose: If True, set log level to DEBUG
     """
+    level: str = "DEBUG" if verbose else "INFO"
+
     # Remove default handler
     logger.remove()
-
-    # Add stderr handler with appropriate level
-    level: str = "DEBUG" if verbose else "INFO"
-    logger.add(sys.stderr, level=level)
 
     # Add file handler if specified
     if log_file:
         try:
             # Create parent directory if it doesn't exist
+            if not is_pathname_valid(log_file):
+                error_msg = f"Invalid log file path: {log_file}"
+                raise ValueError(error_msg)
             log_path: Path = Path(log_file)
             log_path.parent.mkdir(parents=True, exist_ok=True)
-            logger.add(log_file, rotation="10 MB")
+            logger.add(log_file, rotation="10 MB", level=level)
         except Exception as e:
-            logger.error(f"Failed to set up log file: {e}")
+            # Print error directly to stderr before setting up logger
+            print(f"Failed to set up log file: {e}", file=sys.stderr, flush=True)
+            # Add stderr handler after error
+            logger.add(sys.stderr, colorize=False, level=level)
+            # Log startup message
+            logger.info("Starting fc-audit")
+            logger.info(f"Log level: {level}")
+            return
+
+    # Add stderr handler
+    logger.add(sys.stderr, colorize=False, level=level)
 
     # Log startup message
     logger.info("Starting fc-audit")
+    logger.info(f"Log level: {level}")
 
 
 def parse_args(argv: Sequence[str | Path] | None = None) -> argparse.Namespace:
@@ -219,71 +319,6 @@ def format_by_file(
     return by_file
 
 
-def handle_get_properties(args: argparse.Namespace) -> int:
-    """Handle get-properties command.
-
-    Args:
-        args: Command line arguments
-
-    Returns:
-        Exit code (0 for success, non-zero for error)
-    """
-    error_occurred: bool = False
-    properties: set[str] = set()
-    for file_path in args.files:
-        try:
-            file_properties: set[str] = get_document_properties(Path(file_path))
-            properties.update(file_properties)
-        except Exception as e:
-            error_msg = f"{file_path} is not a valid FCStd file: {e}"
-            logger.error(error_msg)
-            error_occurred = True
-
-    if properties:
-        print("Properties found:")
-        for prop in sorted(properties):
-            print(f"  {prop}")
-    else:
-        print("No properties found")
-
-    return 1 if error_occurred else 0
-
-
-def handle_get_aliases(args: argparse.Namespace) -> int:
-    """Handle get-aliases command.
-
-    Args:
-        args: Command line arguments
-
-    Returns:
-        Exit code (0 for success, non-zero for error)
-    """
-    error_occurred: bool = False
-    aliases: set[str] = set()
-    for file_path in args.files:
-        try:
-            file_aliases: set[str] = get_cell_aliases(file_path)
-            aliases.update(file_aliases)
-        except InvalidFileError as e:
-            error_msg = f"{file_path} is not a valid FCStd file: {e}"
-            logger.error(error_msg)
-            error_occurred = True
-        except Exception as e:
-            error_msg = f"Error processing {file_path}: {e}"
-            logger.error(error_msg)
-            error_occurred = True
-
-    if aliases:
-        print("Cell aliases found:")
-        alias: str
-        for alias in sorted(aliases):
-            print(f"  {alias}")
-    else:
-        print("No cell aliases found")
-
-    return 1 if error_occurred else 0
-
-
 def process_references(
     file_paths: list[Path], aliases: str | None = None
 ) -> tuple[dict[str, list[Reference]], set[str]]:
@@ -309,29 +344,6 @@ def process_references(
     return outputter.references, collector.processed_files
 
 
-def print_empty_files(processed_files: set[str], references: dict[str, list[Reference]]) -> None:
-    """Print list of files that have no references.
-
-    Args:
-        processed_files: Set of all processed file names
-        references: Dictionary mapping alias names to lists of references
-
-    Output format:
-        Files with no references:
-          <filename>
-          <filename>
-          ...
-    """
-    referenced_files: set[str] = {
-        ref.filename for refs in references.values() for ref in refs if ref.filename is not None
-    }
-    empty_files: set[str] = processed_files - referenced_files
-    if empty_files:
-        filename: str
-        for filename in sorted(empty_files):
-            logger.info(f"Note: {filename} contains no spreadsheet references")
-
-
 def print_references(references: dict[str, list[Reference]], output_format: str, processed_files: set[str]) -> None:
     """Print references in the specified format.
 
@@ -342,7 +354,10 @@ def print_references(references: dict[str, list[Reference]], output_format: str,
     """
     outputter: ReferenceOutputter = ReferenceOutputter(references, processed_files)
     if output_format == "json":
-        print(outputter.to_json())
+        if not references:
+            print('{"message": "No alias references found"}')
+        else:
+            print(outputter.to_json())
     elif output_format == "csv":
         outputter.to_csv()
     elif output_format == "by_file":
@@ -353,50 +368,250 @@ def print_references(references: dict[str, list[Reference]], output_format: str,
         outputter.print_by_alias()
 
 
-def handle_get_references(args: argparse.Namespace, file_paths: list[Path] | None = None) -> int:
-    """Handle get-references command.
+def handle_get_properties(_args: argparse.Namespace, file_paths: list[Path]) -> int:
+    """Handle get-properties command.
 
     Args:
         args: Command line arguments
-        file_paths: Optional list of file paths to process. If not provided,
-            uses args.files.
+        file_paths: List of file paths to process
 
     Returns:
         Exit code (0 for success, non-zero for error)
     """
     try:
-        paths: list[Path] = file_paths if file_paths is not None else args.files
-        references: dict[str, list[Reference]]
-        processed_files: set[str]
-        references, processed_files = process_references(paths, args.aliases)
-
-        # Handle output formats
-        output_format = (
-            "json"
-            if getattr(args, "json", False)
-            else "csv"
-            if getattr(args, "csv", False)
-            else "by_object"
-            if getattr(args, "by_object", False)
-            else "by_file"
-            if getattr(args, "by_file", False)
-            else "by_alias"
-        )
-        print_references(references, output_format, processed_files)
-
-        # Return 1 if no references found
-        if not references:
-            return 1
-        return 0
-    except InvalidFileError as e:
-        logger.error(str(e))
+        success = False
+        for path in file_paths:
+            try:
+                properties = get_document_properties(path)
+                if properties:
+                    print(f"Properties found for {path}:")
+                    for prop in sorted(properties):
+                        print(f"  {prop}")
+                    success = True
+                else:
+                    print(f"No properties found for {path}")
+            except (InvalidFileError, XMLParseError) as e:
+                print(f"{path} is not a valid FCStd file: {e}", file=sys.stderr)
+            except Exception as e:
+                print(f"Error processing {path}: {e}", file=sys.stderr)
+        return 0 if success else 1
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
         return 1
-    except XMLParseError as e:
-        logger.error(str(e))
+
+
+def _filter_aliases_by_patterns(aliases: set[str], patterns: str) -> set[str]:
+    """Filter aliases by comma-separated patterns.
+
+    Args:
+        aliases: Set of aliases to filter
+        patterns: Comma-separated patterns to match against
+
+    Returns:
+        Filtered set of aliases
+    """
+    filtered = set()
+    for pattern in patterns.split(","):
+        for alias in aliases:
+            if fnmatch.fnmatch(alias, pattern):
+                filtered.add(alias)
+    return filtered
+
+
+def _process_single_file(path: Path, patterns: str | None = None) -> tuple[bool, set[str], Path]:
+    """Process a single file to extract aliases.
+
+    Args:
+        path: Path to the file to process
+        patterns: Optional patterns to filter aliases
+
+    Returns:
+        Tuple of (success, found aliases, path)
+    """
+    try:
+        aliases = get_cell_aliases(path)
+        if not aliases:
+            print(f"No aliases found for {path}")
+            return False, set(), path
+
+        if patterns:
+            aliases = _filter_aliases_by_patterns(aliases, patterns)
+
+        return True, aliases, path
+
+    except (InvalidFileError, XMLParseError) as e:
+        print(f"{path} is not a valid FCStd file: {e}", file=sys.stderr)
+        return False, set(), path
+    except Exception as e:
+        print(f"Error processing {path}: {e}", file=sys.stderr)
+        return False, set(), path
+
+
+def handle_get_aliases(args: argparse.Namespace, file_paths: list[Path]) -> int:
+    """Handle get-aliases command.
+
+    Args:
+        args: Command line arguments
+        file_paths: List of file paths to process
+
+    Returns:
+        Exit code (0 for success, non-zero for error)
+    """
+    try:
+        success = False
+        found_aliases: set[str] = set()
+        last_path: Path | None = None
+
+        for path in file_paths:
+            file_success, aliases, current_path = _process_single_file(path, args.aliases)
+            success = success or file_success
+            found_aliases.update(aliases)
+            if file_success:
+                last_path = current_path
+
+        if found_aliases and last_path:
+            print(f"Aliases found for {last_path}:")
+            for alias in sorted(found_aliases):
+                print(f"  {alias}")
+
+        return 0 if success else 1
+
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+
+def _filter_references_by_patterns(
+    references: dict[str, list[Reference]], patterns: str
+) -> dict[str, list[Reference]]:
+    """Filter references by alias patterns.
+
+    Args:
+        references: Dictionary of references to filter
+        patterns: Comma-separated patterns to match against
+
+    Returns:
+        Filtered dictionary of references
+    """
+    filtered_refs: dict[str, list[Reference]] = {}
+    for alias, refs in references.items():
+        for pattern in patterns.split(","):
+            if pattern and fnmatch.fnmatch(alias, pattern):
+                filtered_refs[alias] = refs
+                break
+    return filtered_refs
+
+
+def _determine_output_format(args: argparse.Namespace) -> str:
+    """Determine the output format from command line arguments.
+
+    Args:
+        args: Command line arguments
+
+    Returns:
+        Output format string
+    """
+    if getattr(args, "json", False):
+        return "json"
+    if getattr(args, "csv", False):
+        return "csv"
+    if getattr(args, "by_object", False):
+        return "by_object"
+    if getattr(args, "by_file", False):
+        return "by_file"
+    return "by_alias"
+
+
+def _print_no_references(output_format: str) -> None:
+    """Print message when no references are found.
+
+    Args:
+        output_format: Output format to use
+    """
+    if output_format == "json":
+        print(json.dumps({"message": "No alias references found"}))
+    else:
+        print("No alias references found")
+
+
+def _output_references(outputter: ReferenceOutputter, output_format: str) -> None:
+    """Output references in the specified format.
+
+    Args:
+        outputter: ReferenceOutputter instance
+        output_format: Output format to use
+    """
+    if output_format == "json":
+        print(outputter.to_json())
+    elif output_format == "csv":
+        outputter.to_csv()
+    elif output_format == "by_object":
+        outputter.print_by_object()
+    elif output_format == "by_file":
+        outputter.print_by_file()
+    else:
+        outputter.print_by_alias()
+
+
+def handle_get_references(args: argparse.Namespace, file_paths: list[Path]) -> int:
+    """Handle get-references command.
+
+    Args:
+        args: Command line arguments
+        file_paths: List of file paths to process.
+
+    Returns:
+        Exit code (0 for success, non-zero for error)
+    """
+    try:
+        collector = ReferenceCollector(file_paths)
+        references = collector.collect()
+        if args.aliases:
+            references = _filter_references_by_patterns(references, args.aliases)
+
+        output_format = _determine_output_format(args)
+        if not references:
+            _print_no_references(output_format)
+            return 1
+
+        outputter = ReferenceOutputter(references, collector.processed_files)
+        _output_references(outputter, output_format)
+        return 0
+
+    except (InvalidFileError, XMLParseError) as e:
+        print(f"{file_paths[0]} is not a valid FCStd file: {e}", file=sys.stderr)
+        _print_no_references(_determine_output_format(args))
         return 1
     except Exception as e:
-        logger.error("Unexpected error: %s", e)
+        print(f"Error processing files: {e}", file=sys.stderr)
+        _print_no_references(_determine_output_format(args))
         return 1
+
+
+def valid_files(files: list[Path]) -> Iterable[Path]:
+    """Filter out non-existent files from the list.
+
+    Args:
+        files: List of file paths to validate
+
+    Returns:
+        Iterator of valid file paths
+    """
+    for path in files:
+        if not path.exists():
+            logger.error(f"{path}: File not found")
+            continue
+        if not path.is_file():
+            logger.error(f"{path}: Not a file")
+            continue
+        try:
+            if not is_fcstd_file(path):
+                logger.error(f"{path}: Not a valid FCStd file")
+                continue
+        except Exception as e:
+            logger.error(f"{path}: Error checking file: {e}")
+            continue
+        yield path
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -415,12 +630,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         # Configure logging
         setup_logging(getattr(args, "log_file", None), getattr(args, "verbose", False))
 
+        files = list(valid_files(args.files))
+        if not files:
+            print("No valid files provided", file=sys.stderr)
+            return 1
+
         if args.command == "properties":
-            return handle_get_properties(args)
+            return handle_get_properties(args, files)
         if args.command == "aliases":
-            return handle_get_aliases(args)
+            return handle_get_aliases(args, files)
         if args.command == "references":
-            return handle_get_references(args)
+            return handle_get_references(args, files)
         logger.error(f"Unknown command: {args.command}")
         return 1
     except Exception as e:

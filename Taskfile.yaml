@@ -89,18 +89,24 @@ tasks:
   test:
     desc: Run tests with pytest
     cmds:
-      - uv run pytest {{.CLI_ARGS}}
+      - uv run pytest -vv {{.CLI_ARGS}}
 
   test:coverage:
     desc: Run tests with coverage report
     cmds:
-      - uv run pytest --cov --cov-report=term-missing
+      - uv run pytest -vv --cov --cov-report=term-missing
       - python -c "import sys; exit(1) if float('{{.COVERAGE_MIN}}') > float('$(uv run coverage report | grep TOTAL | awk '{print $4}' | tr -d '%')') else exit(0)"
 
   # Code quality
+  pre-commit:
+    desc: Run pre-commit hooks
+    cmds:
+      - uv run pre-commit run --all-files
+
   lint:
     desc: Run code quality checks
     cmds:
+      - task: pre-commit
       - task: lint:ruff
       - task: lint:mypy
 
