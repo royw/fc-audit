@@ -384,6 +384,9 @@ def handle_get_references(args: argparse.Namespace, file_paths: list[Path] | Non
         )
         print_references(references, output_format, processed_files)
 
+        # Return 1 if no references found
+        if not references:
+            return 1
         return 0
     except InvalidFileError as e:
         logger.error(str(e))

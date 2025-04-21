@@ -20,6 +20,7 @@ from fc_audit.cli import (
     parse_args,
     setup_logging,
 )
+from fc_audit.output import ReferenceOutputter
 from fc_audit.reference_collector import Reference
 
 TESTS_DIR = Path(__file__).parent
@@ -348,7 +349,7 @@ def test_handle_get_aliases_error(tmp_path: Path, capsys: pytest.CaptureFixture[
     result = handle_get_aliases(args)
     assert result == 1
     captured = capsys.readouterr()
-    assert "Error:" in captured.err
+    assert "No cell aliases found" in captured.out
 
 
 def test_handle_get_references_error(tmp_path: Path) -> None:
@@ -491,6 +492,138 @@ def test_by_alias_sort_order(capsys: pytest.CaptureFixture[str]) -> None:
             object_names = re.findall(r"Object: (.*?)\n", block)
             assert object_names == sorted(object_names)
             break
+
+
+def test_references_csv_format(capsys: pytest.CaptureFixture[str]) -> None:
+    """Test the --csv output format of references command."""
+    refs = {
+        "Length": [
+            Reference(
+                filename="Test1.FCStd",
+                object_name="Box",
+                expression="<<globals>>#<<params>>.Length + 10",
+            )
+        ],
+        "Width,Special": [  # Test comma in alias name
+            Reference(
+                filename="Test1.FCStd",
+                object_name='Box"Quote"',  # Test quote in object name
+                expression='<<globals>>#<<params>>."Width,Special" * 2',
+            )
+        ],
+    }
+    processed_files = {"Test1.FCStd"}
+    outputter = ReferenceOutputter(refs, processed_files)
+    outputter.to_csv()
+    captured = capsys.readouterr()
+
+    # Split output into lines and verify each line
+    lines = captured.out.splitlines()
+    assert len(lines) == 3  # Header + 2 data lines
+    assert lines[0] == "alias,filename,object_name,expression"
+
+    # Verify data lines are properly formatted
+
+    def split_csv_string(csv_string: str) -> list[str]:
+        """Split a CSV string, handling quoted fields with commas."""
+        # Replace commas within quoted fields with a different character
+        s = re.sub(r'\"((?:[^"]|\"\")*)\"', lambda m: m.group(0).replace(",", "|"), csv_string)
+        # Split the string using commas
+        return [item.replace("|", ",") for item in s.split(",")]
+
+    for line in lines[1:]:
+        parts = split_csv_string(line)
+        assert len(parts) == 4
+        assert all(part.startswith('"') and part.endswith('"') for part in parts)
+
+
+def test_references_csv_empty(capsys: pytest.CaptureFixture[str]) -> None:
+    """Test CSV output with empty reference set."""
+    refs: dict[str, list[Reference]] = {}
+    processed_files: set[str] = set()
+    outputter = ReferenceOutputter(refs, processed_files)
+    outputter.to_csv()
+    captured = capsys.readouterr()
+
+    # Should output 'No alias references found'
+    assert captured.out == "No alias references found\n"
+
+
+def test_references_csv_sort_order(capsys: pytest.CaptureFixture[str]) -> None:
+    """Test that CSV output is sorted by alias, then filename, then object name."""
+    refs = {
+        "B": [
+            Reference(filename="2.FCStd", object_name="Box", expression="expr"),
+            Reference(filename="1.FCStd", object_name="Box", expression="expr"),
+        ],
+        "A": [
+            Reference(filename="1.FCStd", object_name="Sketch", expression="expr"),
+            Reference(filename="1.FCStd", object_name="Box", expression="expr"),
+        ],
+    }
+    processed_files = {"1.FCStd", "2.FCStd"}
+    outputter = ReferenceOutputter(refs, processed_files)
+    outputter.to_csv()
+    captured = capsys.readouterr()
+
+    lines = captured.out.splitlines()[1:]  # Skip header
+    assert "A" in lines[0]  # First alias alphabetically
+    assert "1.FCStd" in lines[0]  # First file alphabetically
+    assert "Box" in lines[0]  # First object alphabetically
+
+
+def test_references_format_conflict() -> None:
+    """Test that incompatible format options raise an error."""
+    with pytest.raises(SystemExit):
+        parse_args(["references", "--csv", "--json", "file.FCStd"])
+    with pytest.raises(SystemExit):
+        parse_args(["references", "--csv", "--by-file", "file.FCStd"])
+
+
+def test_references_invalid_files(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """Test handling of invalid file paths."""
+    nonexistent = tmp_path / "nonexistent.FCStd"
+    invalid = tmp_path / "invalid.txt"
+    invalid.touch()
+
+    args = argparse.Namespace(
+        files=[nonexistent],
+        aliases=None,
+        json=False,
+        csv=True,
+        by_file=False,
+        by_object=False,
+        by_alias=False,
+    )
+    # Should exit with error code 1 and print error message
+    result = handle_get_references(args)
+    assert result == 1
+    captured = capsys.readouterr()
+    assert "No alias references found" in captured.out
+
+    args.files = [invalid]
+    # Should exit with error code 1 and print error message
+    result = handle_get_references(args)
+    assert result == 1
+    captured = capsys.readouterr()
+    assert "No alias references found" in captured.out
+
+
+def test_main_entry_point(capsys: pytest.CaptureFixture[str]) -> None:
+    """Test the main entry point with various arguments."""
+    from fc_audit.__main__ import main as main_entry
+
+    # Test help output
+    with pytest.raises(SystemExit):
+        main_entry(["--help"])
+    captured = capsys.readouterr()
+    assert "usage:" in captured.out
+
+    # Test invalid command
+    with pytest.raises(SystemExit):
+        main_entry(["invalid"])
+    captured = capsys.readouterr()
+    assert "error:" in captured.err
 
 
 def test_format_by_file_edge_cases() -> None:
