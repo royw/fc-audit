@@ -15,57 +15,97 @@ This is particularly useful for:
 
 ## Installation
 
-TBD
+The recommended way to install fc-audit is using [pipx](https://pypa.github.io/pipx/), which installs the tool in an isolated environment.
+
+1. First, install pipx:
+
+   **Linux**:
+
+   Using package managers:
+   ```bash
+   # Ubuntu/Debian
+   sudo apt update
+   sudo apt install pipx
+   pipx ensurepath
+
+   # Fedora
+   sudo dnf install pipx
+   pipx ensurepath
+
+   # Arch Linux
+   sudo pacman -S python-pipx
+   pipx ensurepath
+   ```
+
+   Or using pip:
+   ```bash
+   python3 -m pip install --user pipx
+   python3 -m pipx ensurepath
+   ```
+
+   **macOS**:
+   ```bash
+   brew install pipx
+   pipx ensurepath
+   ```
+
+   **Windows**:
+   ```powershell
+   py -3 -m pip install --user pipx
+   py -3 -m pipx ensurepath
+   ```
+
+2. Then install fc-audit:
+   ```bash
+   pipx install fc-audit
+   ```
+
+After installation, verify it works:
+```bash
+fc-audit --version
+```
 
 Requirements:
 
-- Python 3.10 or higher
-- FreeCAD documents in FCStd format
+- Python 3.11 or higher
+- FreeCAD documents in [FCStd format](https://wiki.freecad.org/File_Format_FCStd)
 
 ## CLI Usage
 
-### Get Properties
-
-Extract unique property names from one or more FreeCAD documents:
-
-```bash
-fc-audit get-properties file1.FCStd [file2.FCStd ...]
-```
-
-### Get Cell Aliases
+### Aliases
 
 Extract cell aliases from one or more FreeCAD documents:
 
 ```bash
-fc-audit get-aliases file1.FCStd [file2.FCStd ...]
+fc-audit aliases file1.FCStd [file2.FCStd ...]
 ```
 
-### Get Expressions
+### Properties
 
-Extract and unescape expressions from one or more FreeCAD documents:
+Extract unique property names from one or more FreeCAD documents:
 
 ```bash
-fc-audit get-expressions file1.FCStd [file2.FCStd ...]
+fc-audit properties file1.FCStd [file2.FCStd ...]
 ```
 
-### Get References
+### References
 
-Extract and analyze alias references from expressions in FreeCAD documents. For each alias, shows which objects reference it and their expressions.
+Extract and analyze alias references from expressions in FreeCAD documents. For each alias, show which objects reference it and their expressions.
 
 By default, all discovered aliases will be shown:
 ```bash
 # Show all aliases found in the documents
-fc-audit get-references file1.FCStd [file2.FCStd ...]
+fc-audit references file1.FCStd [file2.FCStd ...]
 ```
 
 Use `--aliases` to filter and show only specific aliases:
 ```bash
 # Filter to show only specific aliases
-fc-audit get-references --aliases alias1,alias2 file1.FCStd [file2.FCStd ...]
+fc-audit references --aliases alias1,alias2 file1.FCStd [file2.FCStd ...]
 ```
 
 Options:
-- `--aliases`: Optional. Comma-separated list of aliases to show. When not specified, all discovered aliases will be shown. Supports wildcards like `*` and `?` (e.g., `Fan*` matches all aliases starting with "Fan").
+- `--aliases`: Optional. Comma-separated list of aliases to show. When not specified, all discovered aliases will be shown. Supports wildcards like `*` and `?` (e.g., `Fan*` matches all aliases starting with "Fan").  Note, you should quote the list of aliases if you are using shell wildcards, for example: `--aliases "Fan*"`
 
 Output Format Options:
 You must choose exactly one of these output formats:
@@ -74,22 +114,91 @@ You must choose exactly one of these output formats:
 - `--by-object`: Group output by file and object
 - `--by-file`: Group output by file and alias
 - `--json`: Output in JSON format for programmatic use
+- `--csv`: Output as comma-separated values (CSV)
 
 Note: These format options are mutually exclusive - you cannot use more than one at a time.
 
 Examples:
 ```bash
 # Show all Fan-related aliases (default format)
-fc-audit get-references --aliases "Fan*" file.FCStd
+fc-audit references --aliases "Fan*" file.FCStd
 
 # Show all Fan-related aliases grouped by file
-fc-audit get-references --by-file --aliases "Fan*" file.FCStd
+fc-audit references --by-file --aliases "Fan*" file.FCStd
 
 # Show all Fan-related aliases grouped by object
-fc-audit get-references --by-object --aliases "Fan*" file.FCStd
+fc-audit references --by-object --aliases "Fan*" file.FCStd
 
 # Get JSON output for programmatic use
-fc-audit get-references --json --aliases "Fan*" file.FCStd > fan_refs.json
+fc-audit references --json --aliases "Fan*" file.FCStd > fan_refs.json
+
+# Get CSV output for spreadsheet analysis
+fc-audit references --csv --aliases "Fan*" file.FCStd > fan_refs.csv
+
+# Show Hull width and length
+fc-audit references --aliases "Hull[WL]*" file.FCStd
+
+# Show multiple aliases
+fc-audit references --aliases "Fan*,Hull*" file.FCStd
+```
+
+For more information on available commands:
+
+```bash
+fc-audit --help
+```
+
+
+### Text Output Formats
+
+#### --by-alias (default)
+Groups references by alias name, then by file and object:
+```
+Alias: FanDiameter
+  File: DriveFans.FCStd
+    Object: Sketch
+      Expression: <<params>>.FanDiameter
+      Expression: <<params>>.FanDiameter + 2 * <<params>>.WallThickness
+    Object: Sketch002
+      Expression: <<params>>.FanDiameter
+```
+
+#### --by-file
+Groups references by file, then by alias and object:
+```
+File: DriveFans.FCStd
+  Alias: FanDiameter
+    Object: Sketch
+      Expression: <<params>>.FanDiameter
+      Expression: <<params>>.FanDiameter + 2 * <<params>>.WallThickness
+    Object: Sketch002
+      Expression: <<params>>.FanDiameter
+```
+
+#### --by-object
+Groups references by object, then by file and alias:
+```
+Object: Sketch
+  File: DriveFans.FCStd
+    Alias: FanDiameter
+      Expression: <<params>>.FanDiameter
+      Expression: <<params>>.FanDiameter + 2 * <<params>>.WallThickness
+```
+
+### CSV output format
+
+The CSV output has the following columns:
+
+- `alias`: The name of the parameter
+- `filename`: The FreeCAD file containing the reference
+- `object_name`: The name of the object using the parameter
+- `expression`: The expression containing the parameter reference
+
+Example CSV output:
+```csv
+alias,filename,object_name,expression
+"FanDiameter","file.FCStd","Sketch","<<params>>.FanDiameter"
+"FanHeight","file.FCStd","Pad001","<<params>>.FanHeight"
 ```
 
 ### JSON output format
@@ -115,27 +224,11 @@ The JSON output is organized by:
 3. `alias_name`: The alias being referenced
 4. `expressions`: List of expressions using the alias
 
-### Show Hull width and length
-```bash
-fc-audit get-references --aliases "Hull[WL]*" file.FCStd
-```
-
-### Multiple patterns
-```bash
-fc-audit get-references --aliases "Fan*,Hull*" file.FCStd
-```
-
-For more information on available commands:
-
-```bash
-fc-audit --help
-```
-
 ## Development
 
 ### Setup
 
-This example uses [uv](https://github.com/astral-sh/uv), but you can use any other tool you prefer.
+This example uses [uv](https://github.com/astral-sh/uv), but you can use any tool (hatch, poetry, etc.) you prefer.
 
 ```bash
 # Create and activate virtual environment
@@ -154,58 +247,62 @@ After installing in development mode, you can run fc-audit directly:
 # Run from the project root
 python -m fc_audit --help
 
-# Or use the entry point script
+# Or use the entry point script in your virtual environment's bin directory
 fc-audit --help
 ```
 
-### Testing and Code Quality Tools
+### Development Tasks
 
-#### Running Tests with pytest
+This project uses [Task](https://taskfile.dev/) to manage development tasks. After installing Task, you can run:
+
 ```bash
-# Run all tests
-pytest
+# Show all available tasks
+task --list-all
+
+# Run all CI checks (recommended before submitting a PR)
+task ci
+```
+
+The `task ci` command runs the following checks:
+
+1. Code quality checks (ruff and mypy)
+2. Code metrics
+3. Tests with coverage report (minimum 85% coverage)
+4. Documentation build
+5. Package build
+
+You can also run individual tasks:
+
+```bash
+# Run tests
+task test
 
 # Run tests with coverage report
-pytest --cov
+task test:coverage
 
-# Run tests verbosely
-pytest -v
+# Run linting
+task lint
 
-# Run specific test file
-pytest tests/test_cli.py
+# Format code
+task format
 
-# Run specific test
-pytest tests/test_cli.py::test_parse_args
+# Run type checks
+task lint:mypy
+
+# Build documentation
+task docs:build
+
+# Serve documentation locally
+task docs
 ```
 
-#### Running Type Checks with mypy
-```bash
-# Check all files
-mypy src tests
-
-# Check specific file
-mypy src/fc_audit/cli.py
-```
-
-#### Running Linting with ruff
-```bash
-# Check all files
-ruff check src tests
-
-# Fix issues automatically
-ruff check --fix src tests
-
-# Check specific file
-ruff check src/fc_audit/cli.py
-```
-
-#### Setting up pre-commit hooks
+### Pre-commit Hooks
 
 pre-commit hooks run automatically on `git commit` to ensure code quality and consistency. To set up:
 
 ```bash
 # Install pre-commit in your environment
-pre-commit install
+uv pip install pre-commit
 
 # Optional: Run hooks on all files
 pre-commit run --all-files
@@ -215,7 +312,10 @@ pre-commit run ruff --all-files
 pre-commit run mypy --all-files
 ```
 
-Configured hooks:
+Note: If you get a "No module named pre_commit" error, try running `pre-commit install` in your virtual environment.
+Resetting your virtual environment may cause this error.
+
+### Configured Hooks
 
 1. File Formatting and Validation:
    - Trailing whitespace removal
@@ -245,27 +345,6 @@ git commit -m "message" --no-verify
 
 Note: Using `--no-verify` is discouraged as it skips important quality checks.
 
-#### Running All Checks with tox
-```bash
-# Run all environments
-tox
-
-# Run specific environment
-tox -e py312
-tox -e lint
-tox -e type
-
-# Run with specific Python version
-uvx --python 3.11 tox
-```
-
-Tox environments:
-- `py310`, `py311`, `py312`: Run tests on different Python versions
-- `lint`: Run code style checks with ruff
-- `type`: Run type checks with mypy
-
-Current test coverage:
-- Overall: 89%
 
 ### Documentation
 
@@ -276,6 +355,14 @@ We use [MkDocs](https://www.mkdocs.org/) with the [Material theme](https://squid
 - Development Guide
 
 #### Building Documentation
+
+```bash
+# Build and serve documentation locally
+task docs
+```
+
+#### Manual Steps
+
 ```bash
 # Install documentation dependencies
 uv pip install -e ".[dev]"
@@ -303,12 +390,12 @@ The tool provides detailed error messages and handles common issues:
 
 Use the `-v` or `--verbose` flag for detailed logging:
 ```bash
-fc-audit -v get-references file.FCStd
+fc-audit -v references file.FCStd
 ```
 
 Optionally, log to a file:
 ```bash
-fc-audit --log-file audit.log get-references file.FCStd
+fc-audit --log-file audit.log references file.FCStd
 ```
 
 ## Contributing
@@ -322,7 +409,7 @@ Thank you for your interest in contributing to fc-audit! This document provides 
 3. Make your changes
 4. Run tests and quality checks:
    ```bash
-   tox
+   task ci
    ```
 5. Update documentation if needed
 6. Submit a pull request

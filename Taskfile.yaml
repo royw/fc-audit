@@ -38,12 +38,23 @@ vars:
   COVERAGE_MIN: 85
 
 tasks:
+  # Core tasks
   default:
     desc: Show available tasks
     cmds:
       - task --list-all
     silent: true
 
+  ci:
+    desc: Run all CI checks
+    cmds:
+      - task: lint
+      - task: metrics
+      - task: test:coverage
+      - task: docs:build
+      - task: build
+
+  # Environment management
   setup:
     desc: Set up development environment
     cmds:
@@ -51,6 +62,30 @@ tasks:
       - uv pip install -e ".[dev]"
       - pre-commit install
 
+  update-env:
+    desc: Update virtual environment with latest dependencies
+    cmds:
+      - uv pip install --upgrade pip
+      - uv pip install --upgrade -e ".[dev]"
+      - pre-commit install
+
+  sync:
+    desc: Sync all dependencies including dev dependencies from pyproject.toml
+    cmds:
+      - uv pip install --upgrade -e ".[dev]"
+
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - rm -rf build dist .eggs *.egg-info
+      - find . -type d -name __pycache__ -exec rm -rf {} +
+      - find . -type d -name .pytest_cache -exec rm -rf {} +
+      - find . -type d -name .ruff_cache -exec rm -rf {} +
+      - find . -type d -name .mypy_cache -exec rm -rf {} +
+      - find . -type f -name .coverage -delete
+      - find . -type d -name htmlcov -exec rm -rf {} +
+
+  # Testing
   test:
     desc: Run tests with pytest
     cmds:
@@ -62,6 +97,7 @@ tasks:
       - uv run pytest --cov --cov-report=term-missing
       - python -c "import sys; exit(1) if float('{{.COVERAGE_MIN}}') > float('$(uv run coverage report | grep TOTAL | awk '{print $4}' | tr -d '%')') else exit(0)"
 
+  # Code quality
   lint:
     desc: Run code quality checks
     cmds:
@@ -93,26 +129,24 @@ tasks:
     cmds:
       - uv run pre-commit run --all-files
 
-  clean:
-    desc: Clean build artifacts
-    cmds:
-      - rm -rf build dist .eggs *.egg-info
-      - find . -type d -name __pycache__ -exec rm -rf {} +
-      - find . -type d -name .pytest_cache -exec rm -rf {} +
-      - find . -type d -name .ruff_cache -exec rm -rf {} +
-      - find . -type d -name .mypy_cache -exec rm -rf {} +
-      - find . -type f -name .coverage -delete
-      - find . -type d -name htmlcov -exec rm -rf {} +
-
+  # Documentation
   docs:
-    desc: Serve documentation locally
+    desc: Build and serve documentation locally
     cmds:
+      - task: docs:build
       - uv run mkdocs serve
 
   docs:build:
     desc: Build documentation
     cmds:
       - uv run mkdocs build
+
+  # Build
+  build:
+    desc: Build package distribution
+    cmds:
+      - task: build:wheel
+      - task: build:sdist
 
   build:wheel:
     desc: Build wheel distribution
@@ -123,23 +157,3 @@ tasks:
     desc: Build source distribution
     cmds:
       - uv run python -m build --sdist
-
-  build:
-    desc: Build package distribution
-    cmds:
-      - task: build:wheel
-      - task: build:sdist
-
-  sync:
-    desc: Sync all dependencies including dev dependencies from pyproject.toml
-    cmds:
-      - uv pip install --upgrade -e ".[dev]"
-
-  ci:
-    desc: Run all CI checks
-    cmds:
-      - task: lint
-      - task: metrics
-      - task: test:coverage
-      - task: docs:build
-      - task: build
