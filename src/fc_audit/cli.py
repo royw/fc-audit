@@ -103,6 +103,11 @@ def parse_args(argv: Sequence[str | Path] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Output in JSON format",
     )
+    format_group.add_argument(
+        "--csv",
+        action="store_true",
+        help="Output as comma-separated values",
+    )
 
     # Filter options
     references_parser.add_argument(
@@ -332,12 +337,14 @@ def print_references(references: dict[str, list[Reference]], output_format: str,
 
     Args:
         references: Dictionary of references to print
-        output_format: One of 'json', 'by_object', 'by_file', or 'by_alias'
+        output_format: One of 'json', 'csv', 'by_object', 'by_file', or 'by_alias'
         processed_files: Set of all processed file names
     """
     outputter: ReferenceOutputter = ReferenceOutputter(references, processed_files)
     if output_format == "json":
         print(outputter.to_json())
+    elif output_format == "csv":
+        outputter.to_csv()
     elif output_format == "by_file":
         outputter.print_by_file()
     elif output_format == "by_object":
@@ -367,6 +374,8 @@ def handle_get_references(args: argparse.Namespace, file_paths: list[Path] | Non
         output_format = (
             "json"
             if getattr(args, "json", False)
+            else "csv"
+            if getattr(args, "csv", False)
             else "by_object"
             if getattr(args, "by_object", False)
             else "by_file"
