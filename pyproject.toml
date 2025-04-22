@@ -79,6 +79,7 @@ dev = [
   "radon>=6.0.1",
   "ruff>=0.11.5",
   "version-bumper<0.2.0,>=0.1.1",
+  "codespell>=2.2.6",
 ]
 
 [tool.coverage.run]
@@ -192,6 +193,14 @@ line-length = 119
 fix = true
 # Enumerate all fixed violations.
 show-fixes = true
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.codespell]
+skip = '.git,*.pyc,*.pdf,*.svg'
+quiet-level = 3
+ignore-words-list = 'wallthickness'
 
 [tool.ruff.format]
 # Enable reformatting of code snippets in docstrings.

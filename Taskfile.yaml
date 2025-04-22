@@ -109,6 +109,7 @@ tasks:
       - task: pre-commit
       - task: lint:ruff
       - task: lint:mypy
+      - task: spell
 
   lint:ruff:
     desc: Run ruff linter
@@ -119,6 +120,11 @@ tasks:
     desc: Run type checks
     cmds:
       - uv run mypy src tests
+
+  spell:
+    desc: Check spelling in code and documentation
+    cmds:
+      - uv run codespell src tests docs README.md
 
   format:
     desc: Format code with ruff
