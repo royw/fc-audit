@@ -53,6 +53,53 @@ def is_fcstd_file(filepath: Path) -> bool:
         return False
 
 
+def get_document_properties_with_context(filepath: Path) -> dict[str, list[tuple[str, str]]]:
+    """Extract properties with their object context from a FreeCAD document.
+
+    Args:
+        filepath: Path to FCStd file
+
+    Returns:
+        Dictionary mapping property names to lists of (object_name, value) tuples
+
+    Raises:
+        InvalidFileError: If file is not a valid FCStd file
+        XMLParseError: If XML parsing fails
+    """
+    if not is_fcstd_file(filepath):
+        error_msg = f"{filepath} is not a valid FCStd file"
+        raise InvalidFileError(error_msg)
+
+    try:
+        content: str = _read_xml_content(filepath)
+        root: ET.Element = _parse_xml_content(content)
+
+        # Find all Property elements with their object context
+        properties: dict[str, list[tuple[str, str]]] = {}
+        for prop in root.findall(".//Property[@name]"):
+            try:
+                name = prop.attrib["name"]
+                obj_elem, _ = _find_parent_with_identifier(prop, root)
+                obj_name = obj_elem.attrib.get("name", "unknown") if obj_elem is not None else "unknown"
+                string_elem = prop.find("String")
+                value = string_elem.text if string_elem is not None and string_elem.text is not None else ""
+                if name not in properties:
+                    properties[name] = []
+                properties[name].append((obj_name, value))
+            except (KeyError, AttributeError):
+                continue
+
+        return properties
+
+    except (InvalidFileError, XMLParseError) as e:
+        logger.error(str(e))
+        raise
+    except Exception as e:
+        error_msg = f"Failed to parse properties: {e}"
+        logger.error(error_msg)
+        raise XMLParseError(error_msg) from e
+
+
 def get_document_properties(filepath: Path) -> set[str]:
     """Extract unique property names from a FreeCAD document.
 

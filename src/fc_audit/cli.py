@@ -14,8 +14,9 @@ from loguru import logger
 
 from .alias_outputter import AliasOutputter
 from .exceptions import InvalidFileError, XMLParseError
-from .fcstd import get_cell_aliases, get_document_properties, is_fcstd_file
+from .fcstd import get_cell_aliases, is_fcstd_file
 from .logging import setup_logging
+from .properties_outputter import PropertiesOutputter
 from .reference_collector import Reference as BaseReference
 from .reference_collector import ReferenceCollector
 from .reference_outputter import ReferenceOutputter
@@ -95,6 +96,34 @@ def parse_args(argv: Sequence[str | Path] | None = None) -> argparse.Namespace:
         "properties", help="Show document properties from FreeCAD documents"
     )
     properties_parser.add_argument("files", nargs="+", type=Path, help="FreeCAD document files to analyze")
+
+    # Format options for properties
+    properties_format_group: argparse._MutuallyExclusiveGroup = properties_parser.add_mutually_exclusive_group()
+    properties_format_group.add_argument(
+        "--text",
+        action="store_true",
+        help="Output as simple list of properties (default)",
+    )
+    properties_format_group.add_argument(
+        "--by-file",
+        action="store_true",
+        help="Group properties by file",
+    )
+    properties_format_group.add_argument(
+        "--by-object",
+        action="store_true",
+        help="Group properties by file and object",
+    )
+    properties_format_group.add_argument(
+        "--json",
+        action="store_true",
+        help="Output in JSON format",
+    )
+    properties_format_group.add_argument(
+        "--csv",
+        action="store_true",
+        help="Output as comma-separated values",
+    )
 
     # aliases command
     aliases_parser: argparse.ArgumentParser = subparsers.add_parser(
@@ -271,7 +300,7 @@ def print_references(
         outputter.print_by_alias()
 
 
-def handle_get_properties(_args: argparse.Namespace, file_paths: list[Path]) -> int:
+def handle_get_properties(args: argparse.Namespace, file_paths: list[Path]) -> int:
     """Handle get-properties command.
 
     Args:
@@ -282,22 +311,9 @@ def handle_get_properties(_args: argparse.Namespace, file_paths: list[Path]) -> 
         Exit code (0 for success, non-zero for error)
     """
     try:
-        success = False
-        for path in file_paths:
-            try:
-                properties = get_document_properties(path)
-                if properties:
-                    print(f"Properties found for {path}:")
-                    for prop in sorted(properties):
-                        print(f"  {prop}")
-                    success = True
-                else:
-                    print(f"No properties found for {path}")
-            except (InvalidFileError, XMLParseError) as e:
-                print(f"{path} is not a valid FCStd file: {e}", file=sys.stderr)
-            except Exception as e:
-                print(f"Error processing {path}: {e}", file=sys.stderr)
-        return 0 if success else 1
+        outputter = PropertiesOutputter(file_paths)
+        outputter.output(args)
+        return 0 if outputter.file_properties else 1
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1

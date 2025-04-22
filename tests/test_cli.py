@@ -374,7 +374,7 @@ def test_handle_get_properties_error(tmp_path: Path, capsys: pytest.CaptureFixtu
     args = parse_args(["properties", str(DATA_DIR / "Test1.FCStd"), str(invalid_file)])
     assert handle_get_properties(args, args.files) == 0
     captured = capsys.readouterr()
-    assert "Properties found for" in captured.out
+    assert "Author" in captured.out  # Check for a known property
     assert "is not a valid FCStd file" in captured.err
 
 
