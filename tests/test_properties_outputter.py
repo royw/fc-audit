@@ -75,7 +75,6 @@ def test_output_json(test_files: list[Path], capsys: pytest.CaptureFixture[str])
         for prop in file_data["properties"]:
             assert "name" in prop
             assert "object" in prop
-            assert "value" in prop
 
 
 def test_output_csv(test_files: list[Path], capsys: pytest.CaptureFixture[str]) -> None:

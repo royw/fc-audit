@@ -77,8 +77,8 @@ class PropertiesOutputter:
             properties: list[dict[str, str]] = []
             file_data = {"file": str(filepath), "properties": properties}
             for prop, obj_values in props.items():
-                for obj_name, value in obj_values:
-                    properties.append({"name": prop, "object": obj_name, "value": value})
+                for obj_name, _value in obj_values:
+                    properties.append({"name": prop, "object": obj_name})
             data.append(file_data)
         print(json.dumps(data, indent=2))
 
