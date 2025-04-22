@@ -13,6 +13,9 @@ This is particularly useful for:
 - Auditing spreadsheet usage
 - Analyzing model structure
 
+fc-audit only reads FreeCAD documents and does not modify them.
+
+
 ## Installation
 
 The recommended way to install fc-audit is using [pipx](https://pypa.github.io/pipx/), which installs the tool in an isolated environment.
@@ -67,17 +70,32 @@ fc-audit --version
 
 Requirements:
 
-- Python 3.11 or higher
+- Python 3.12 or higher
 - FreeCAD documents in [FCStd format](https://wiki.freecad.org/File_Format_FCStd)
 
 ## CLI Usage
 
 ### Aliases
 
-Extract cell aliases from one or more FreeCAD documents:
+Extract cell aliases from spreadsheet(s) in one or more FreeCAD documents:
+
+You should include at least one document with at least one spreadsheet as aliases are defined only in spreadsheets.
 
 ```bash
-fc-audit aliases file1.FCStd [file2.FCStd ...]
+# get list of aliases from one file
+fc-audit aliases file1.FCStd
+
+# which is the same as specifying text output from two files
+fc-audit aliases --text file1.FCStd file2.FCStd
+
+# get a filtered list of aliases from all FreeCAD documents in a directory
+fc-audit aliases --filter "Fan*" cad_proj/*.FCStd
+
+# output the list of alias to a json file from all FreeCAD documents in the current directory
+fc-audit aliases --json *.FCStd > aliases.json
+
+# output the list of aliases that end in Width or Length to a csv file
+fc-audit aliases --csv --filter "*Width,*Length" *.FCStd > aliases.csv
 ```
 
 ### Properties
@@ -85,27 +103,41 @@ fc-audit aliases file1.FCStd [file2.FCStd ...]
 Extract unique property names from one or more FreeCAD documents:
 
 ```bash
-fc-audit properties file1.FCStd [file2.FCStd ...]
+fc-audit properties *.FCStd
+```
+
+`fc-audit properties` have the same options as `fc-audit aliases` plus `--by-file` and `--by-object`.
+
+```bash
+fc-audit properties --by-file *.FCStd
+
+fc-audit properties --by-object *.FCStd
 ```
 
 ### References
 
 Extract and analyze alias references from expressions in FreeCAD documents. For each alias, show which objects reference it and their expressions.
 
-By default, all discovered aliases will be shown:
+You should include at least one document with at least one spreadsheet as aliases are defined only in spreadsheets.
+
+By default, all discovered aliases will be shown unless filtered:
 ```bash
 # Show all aliases found in the documents
-fc-audit references file1.FCStd [file2.FCStd ...]
+fc-audit references *.FCStd
 ```
 
-Use `--aliases` to filter and show only specific aliases:
+The `--by-alias`, `--by-object`, and `--by-file` options allow you to group the output by alias, object, or file, respectively.  These output as formatted text with different groupings.
+
+The `--json` and `--csv` options allow you to output the results in JSON or CSV format, respectively.
+
+Use `--filter` to filter and show only specific aliases:
 ```bash
 # Filter to show only specific aliases
-fc-audit references --aliases alias1,alias2 file1.FCStd [file2.FCStd ...]
+fc-audit references --filter alias1,alias2 *.FCStd
 ```
 
-Options:
-- `--aliases`: Optional. Comma-separated list of aliases to show. When not specified, all discovered aliases will be shown. Supports wildcards like `*` and `?` (e.g., `Fan*` matches all aliases starting with "Fan").  Note, you should quote the list of aliases if you are using shell wildcards, for example: `--aliases "Fan*"`
+FilterOption:
+- `--filter`: Optional. Comma-separated list of aliases to show. When not specified, all discovered aliases will be shown. Supports wildcards like `*` and `?` (e.g., `Fan*` matches all aliases starting with "Fan").  Note, you should quote the list of aliases if you are using shell wildcards, for example: `--filter "Fan*"`
 
 Output Format Options:
 You must choose exactly one of these output formats:
@@ -120,26 +152,26 @@ Note: These format options are mutually exclusive - you cannot use more than one
 
 Examples:
 ```bash
-# Show all Fan-related aliases (default format)
-fc-audit references --aliases "Fan*" file.FCStd
+# Show all Fan-related aliases (default format) from two FreeCAD document files
+fc-audit references --filter "Fan*" file1.FCStd file2.FCStd
 
-# Show all Fan-related aliases grouped by file
-fc-audit references --by-file --aliases "Fan*" file.FCStd
+# Show all Fan-related aliases grouped by file from all FreeCAD documents in a directory
+fc-audit references --by-file --filter "Fan*" cad_proj/*.FCStd
 
 # Show all Fan-related aliases grouped by object
-fc-audit references --by-object --aliases "Fan*" file.FCStd
+fc-audit references --by-object --filter "Fan*" *.FCStd
 
 # Get JSON output for programmatic use
-fc-audit references --json --aliases "Fan*" file.FCStd > fan_refs.json
+fc-audit references --json --filter "Fan*" *.FCStd > fan_refs.json
 
 # Get CSV output for spreadsheet analysis
-fc-audit references --csv --aliases "Fan*" file.FCStd > fan_refs.csv
+fc-audit references --csv --filter "Fan*" *.FCStd > fan_refs.csv
 
 # Show Hull width and length
-fc-audit references --aliases "Hull[WL]*" file.FCStd
+fc-audit references --filter "Hull[WL]*" *.FCStd
 
 # Show multiple aliases
-fc-audit references --aliases "Fan*,Hull*" file.FCStd
+fc-audit references --filter "Fan*,Hull*" *.FCStd
 ```
 
 For more information on available commands:
@@ -245,7 +277,7 @@ After installing in development mode, you can run fc-audit directly:
 
 ```bash
 # Run from the project root
-python -m fc_audit --help
+uv python -m fc_audit --help
 
 # Or use the entry point script in your virtual environment's bin directory
 fc-audit --help
@@ -253,23 +285,44 @@ fc-audit --help
 
 ### Development Tasks
 
-This project uses [Task](https://taskfile.dev/) to manage development tasks. After installing Task, you can run:
+The use of [Task](https://taskfile.dev/) is optional, but recommended for development.  Task is used to run the CI checks and other development tasks defined in `Taskfile.yaml`.
 
 ```bash
 # Show all available tasks
 task --list-all
 
-# Run all CI checks (recommended before submitting a PR)
+# Run all CI checks (recommended before committing)
 task ci
 ```
 
 The `task ci` command runs the following checks:
 
-1. Code quality checks (ruff and mypy)
-2. Code metrics
-3. Tests with coverage report (minimum 85% coverage)
-4. Documentation build
-5. Package build
+1. Code quality checks (pre-commit, ruff and mypy)
+2. Code metrics (radon)
+3. Tests with coverage report (pytest)
+4. Documentation build (mkdocs)
+5. Package build (build)
+
+and is equivalent to:
+```bash
+task lint
+task metrics
+task test:coverage
+task docs:build
+task build
+```
+
+which is equivalent to:
+
+```bash
+uv run pre-commit run --all-files
+uv run ruff check src tests
+uv run mypy src tests
+uv run radon cc src
+uv run pytest -vv --cov --cov-report=term-missing
+uv run mkdocs serve
+uv run python -m build --wheel
+```
 
 You can also run individual tasks:
 
@@ -283,11 +336,11 @@ task test:coverage
 # Run linting
 task lint
 
+# or just mypy
+task lint:mypy
+
 # Format code
 task format
-
-# Run type checks
-task lint:mypy
 
 # Build documentation
 task docs:build
@@ -315,9 +368,10 @@ pre-commit run mypy --all-files
 Note: If you get a "No module named pre_commit" error, try running `pre-commit install` in your virtual environment.
 Resetting your virtual environment may cause this error.
 
-### Configured Hooks
+### Configured pre-commit Hooks
 
-1. File Formatting and Validation:
+File Formatting and Validation:
+
    - Trailing whitespace removal
    - End of file fixing (ensures files end with newline)
    - YAML/TOML validation
@@ -327,13 +381,15 @@ Resetting your virtual environment may cause this error.
    - Case conflict detection
    - Mixed line ending fixing
 
-2. Code Style (ruff):
+Code Style (ruff):
+
    - PEP 8 style guide enforcement
    - Code formatting
    - Import sorting
    - Dead code elimination
 
-3. Type Checking (mypy):
+Type Checking (mypy):
+
    - Static type checking
    - Strict mode enabled
    - Type stub validation
@@ -368,16 +424,14 @@ task docs
 uv pip install -e ".[dev]"
 
 # Build the documentation
-mkdocs build
+uv run mkdocs build
 
 # Serve documentation locally
-mkdocs serve
+uv run mkdocs serve
 ```
 
 After running `mkdocs serve`, visit [http://127.0.0.1:8000](http://127.0.0.1:8000) to view the documentation.
 
-- cli.py: 88%
-- fcstd.py: 91%
 
 ### Error Handling
 
@@ -414,13 +468,47 @@ Thank you for your interest in contributing to fc-audit! This document provides 
 5. Update documentation if needed
 6. Submit a pull request
 
-### Code Style and Quality
+### Testing and Code Quality Tools
 
-We use several tools to maintain code quality:
+This project uses several tools to maintain code quality:
 
-1. **pre-commit hooks**: Automatically check code style and quality on commit
-2. **ruff**: Python linter and code formatter
-3. **mypy**: Static type checker
-4. **pytest**: Test framework
+1. **pre-commit**: For automated code quality checks on git commits. Run hooks manually with:
+   ```bash
+   task hooks
+   ```
 
-See the [Testing and Code Quality Tools](#testing-and-code-quality-tools) section for details on using these tools.
+2. **ruff**: For linting and code formatting. Run checks with:
+   ```bash
+   task lint:ruff
+   ```
+
+3. **mypy**: For static type checking. Run checks with:
+   ```bash
+   task lint:mypy
+   ```
+
+4. **pytest**: For running tests. Run the test suite with:
+   ```bash
+   task test
+   ```
+
+5. **radon**: For code complexity metrics. Run analysis with:
+   ```bash
+   task metrics
+   ```
+
+6. **mkdocs**: For building documentation. Build and serve docs with:
+   ```bash
+   task docs:build
+   task docs  # builds and serves at http://127.0.0.1:8000
+   ```
+
+7. **build**: For building Python packages. Create distributions with:
+   ```bash
+   task build  # creates both wheel and sdist
+   ```
+
+You can run all quality checks at once with:
+```bash
+task ci
+```
