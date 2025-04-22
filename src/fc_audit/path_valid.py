@@ -76,6 +76,9 @@ def is_pathname_valid(pathname: str) -> bool:
                         return False
                 elif exc.errno in {errno.ENAMETOOLONG, errno.ERANGE}:
                     return False
+            except ValueError:
+                return False
+
     # If a "TypeError" exception was raised, it almost certainly has the
     # error message "embedded NUL character" indicating an invalid pathname.
     except TypeError:
