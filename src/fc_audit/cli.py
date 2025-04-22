@@ -87,7 +87,7 @@ def parse_args(argv: Sequence[str | Path] | None = None) -> argparse.Namespace:
 
     # Filter options
     references_parser.add_argument(
-        "--aliases",
+        "--filter",
         help="Filter aliases by pattern (e.g. 'Length*' or '*Width')",
     )
 
@@ -149,9 +149,9 @@ def parse_args(argv: Sequence[str | Path] | None = None) -> argparse.Namespace:
     )
 
     aliases_parser.add_argument(
-        "--aliases",
+        "--filter",
         type=str,
-        help="Comma-separated list of aliases to show (default: show all)",
+        help="Comma-separated list of patterns to filter by (default: show all)",
     )
 
     args: argparse.Namespace = parser.parse_args([str(a) for a in (argv or [])])
@@ -337,7 +337,7 @@ def handle_get_aliases(args: argparse.Namespace, files: list[Path]) -> int:
         for path in valid_files(files):
             try:
                 file_aliases = get_cell_aliases(path)
-                file_aliases = _filter_aliases(file_aliases, args.aliases)
+                file_aliases = _filter_aliases(file_aliases, args.filter)
                 all_aliases.update(file_aliases)
                 success = True
             except (InvalidFileError, XMLParseError) as e:
@@ -462,8 +462,8 @@ def handle_get_references(args: argparse.Namespace, file_paths: list[Path]) -> i
     try:
         collector = ReferenceCollector(file_paths)
         references = collector.collect()
-        if args.aliases:
-            references = _filter_references_by_patterns(references, args.aliases)
+        if args.filter:
+            references = _filter_references_by_patterns(references, args.filter)
 
         output_format = _determine_output_format(args)
         if not references:

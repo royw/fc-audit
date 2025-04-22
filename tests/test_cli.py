@@ -45,12 +45,12 @@ def test_all_options_in_help_output(capsys: pytest.CaptureFixture[str]) -> None:
         "--by-object",
         "--by-file",
         "--json",
-        "--aliases",
+        "--filter",
     ]
     # get-properties has only positional 'files'
     # get-aliases options
     get_aliases_options = [
-        "--aliases",
+        "--filter",
     ]
 
     # Helper to run help and check options
@@ -147,15 +147,15 @@ def test_parse_args_references() -> None:
     args = parse_args(["references", str(DATA_DIR / "Test1.FCStd")])
     assert args.command == "references"
     assert args.files == [DATA_DIR / "Test1.FCStd"]
-    assert args.aliases is None
+    assert args.filter is None
     assert args.by_alias is True
     assert not args.by_object
     assert not args.by_file
     assert not args.json
 
     # Test with aliases
-    args = parse_args(["references", "--aliases", "Length,Height", DATA_DIR / "Test1.FCStd"])
-    assert args.aliases == "Length,Height"
+    args = parse_args(["references", "--filter", "Length,Height", DATA_DIR / "Test1.FCStd"])
+    assert args.filter == "Length,Height"
 
     # Test different formats
     args = parse_args(["references", "--by-object", DATA_DIR / "Test1.FCStd"])
@@ -264,7 +264,7 @@ def test_references_json(capsys: pytest.CaptureFixture[str]) -> None:
 def test_references_with_aliases(capsys: pytest.CaptureFixture[str]) -> None:
     """Test references command with alias filtering."""
 
-    main(["references", "--aliases", "Length,Width", str(DATA_DIR / "Test1.FCStd")])
+    main(["references", "--filter", "Length,Width", str(DATA_DIR / "Test1.FCStd")])
     captured = capsys.readouterr()
 
     # Check output format
@@ -396,7 +396,7 @@ def test_handle_get_aliases_error(capsys: pytest.CaptureFixture[str]) -> None:
     assert "is not a valid FCStd file" not in captured.err
 
     # Test with alias filtering
-    args = parse_args(["aliases", "--aliases", "Length,Width", str(DATA_DIR / "Test1.FCStd")])
+    args = parse_args(["aliases", "--filter", "Length,Width", str(DATA_DIR / "Test1.FCStd")])
     assert handle_get_aliases(args, args.files) == 0
     captured = capsys.readouterr()
     assert "Length" in captured.out
@@ -452,7 +452,7 @@ def test_main_error(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert "Not a valid FCStd file" in captured.err
 
     # Test with invalid alias pattern
-    assert main(["references", "--aliases", "[", str(DATA_DIR / "Test1.FCStd")]) == 1
+    assert main(["references", "--filter", "[", str(DATA_DIR / "Test1.FCStd")]) == 1
     captured = capsys.readouterr()
     assert "No alias references found" in captured.out
 
@@ -690,7 +690,7 @@ def test_references_invalid_files(tmp_path: Path, capsys: pytest.CaptureFixture[
 
     args = argparse.Namespace(
         files=[nonexistent],
-        aliases=None,
+        filter=None,
         json=False,
         csv=True,
         by_file=False,
