@@ -44,7 +44,7 @@ class PropertiesOutputter:
         for filepath in sorted(self.file_properties.keys()):
             print(f"\nFile: {filepath}")
             for prop in sorted(self.file_properties[filepath].keys()):
-                print(f"  Property: {prop}")
+                print(f"  {prop}")
                 for _obj_name, value in sorted(self.file_properties[filepath][prop]):
                     if value:
                         print(f"    Value: {value}")
@@ -85,11 +85,15 @@ class PropertiesOutputter:
     def output_csv(self) -> None:
         """Print properties as comma-separated values."""
         writer = csv.writer(sys.stdout, quoting=csv.QUOTE_ALL)
-        writer.writerow(["file", "object", "property", "value"])
+        writer.writerow(["file", "object", "property"])
+        rows = []
         for filepath, props in sorted(self.file_properties.items()):
             for prop, obj_values in sorted(props.items()):
-                for obj_name, value in sorted(obj_values):
-                    writer.writerow([str(filepath), obj_name, prop, value])
+                for obj_name, _value in sorted(obj_values):
+                    rows.append([str(filepath), obj_name, prop])
+        # Sort by file, then object, then property
+        rows.sort(key=lambda x: (x[0], x[1], x[2]))
+        writer.writerows(rows)
 
     def output(self, args: argparse.Namespace) -> None:
         """Output properties in the format specified by args.

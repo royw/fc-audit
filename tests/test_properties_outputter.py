@@ -45,7 +45,7 @@ def test_output_by_file(test_files: list[Path], capsys: pytest.CaptureFixture[st
     # Verify output structure
     lines = captured.out.splitlines()
     assert any(line.startswith("File: ") for line in lines)
-    assert any(line.strip().startswith("Property: ") for line in lines)
+    assert any(line.strip() == "Author" for line in lines)
 
 
 def test_output_by_object(test_files: list[Path], capsys: pytest.CaptureFixture[str]) -> None:
@@ -86,7 +86,7 @@ def test_output_csv(test_files: list[Path], capsys: pytest.CaptureFixture[str]) 
 
     # Split output into lines and verify
     lines = captured.out.splitlines()
-    assert lines[0] == '"file","object","property","value"'
+    assert lines[0] == '"file","object","property"'
     assert len(lines) > 1  # At least header + one data row
 
 
@@ -110,7 +110,7 @@ def test_empty_properties(tmp_path: Path, capsys: pytest.CaptureFixture[str]) ->
     # Test CSV output - should only have header
     outputter.output_csv()
     captured = capsys.readouterr()
-    assert captured.out.strip() == '"file","object","property","value"'
+    assert captured.out.strip() == '"file","object","property"'
 
 
 def test_output_method(test_files: list[Path], capsys: pytest.CaptureFixture[str]) -> None:
@@ -128,7 +128,7 @@ def test_output_method(test_files: list[Path], capsys: pytest.CaptureFixture[str
     outputter.output(args)
     captured = capsys.readouterr()
     assert "File:" in captured.out
-    assert "Property:" in captured.out
+    assert "Author" in captured.out
 
     # Test with by-object format
     args = argparse.Namespace(json=False, csv=False, by_file=False, by_object=True)
@@ -148,4 +148,4 @@ def test_output_method(test_files: list[Path], capsys: pytest.CaptureFixture[str
     args = argparse.Namespace(json=False, csv=True, by_file=False, by_object=False)
     outputter.output(args)
     captured = capsys.readouterr()
-    assert captured.out.startswith('"file","object","property","value"')
+    assert captured.out.startswith('"file","object","property"')
