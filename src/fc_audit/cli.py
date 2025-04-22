@@ -12,11 +12,13 @@ from pathlib import Path
 
 from loguru import logger
 
+from .alias_outputter import AliasOutputter
 from .exceptions import InvalidFileError, XMLParseError
 from .fcstd import get_cell_aliases, get_document_properties, is_fcstd_file
 from .logging import setup_logging
-from .output import ReferenceOutputter
-from .reference_collector import Reference, ReferenceCollector
+from .reference_collector import Reference as BaseReference
+from .reference_collector import ReferenceCollector
+from .reference_outputter import ReferenceOutputter
 
 
 def parse_args(argv: Sequence[str | Path] | None = None) -> argparse.Namespace:
@@ -38,6 +40,7 @@ def parse_args(argv: Sequence[str | Path] | None = None) -> argparse.Namespace:
         help="Path to log file",
     )
     parser.add_argument(
+        "-v",
         "--verbose",
         action="store_true",
         help="Enable verbose output",
@@ -98,6 +101,24 @@ def parse_args(argv: Sequence[str | Path] | None = None) -> argparse.Namespace:
         "aliases", help="Show cell aliases from FreeCAD documents"
     )
     aliases_parser.add_argument("files", nargs="+", type=Path, help="FreeCAD document files to analyze")
+    # Format options
+    aliases_format_group: argparse._MutuallyExclusiveGroup = aliases_parser.add_mutually_exclusive_group()
+    aliases_format_group.add_argument(
+        "--text",
+        action="store_true",
+        help="Output in text format (default)",
+    )
+    aliases_format_group.add_argument(
+        "--json",
+        action="store_true",
+        help="Output in JSON format",
+    )
+    aliases_format_group.add_argument(
+        "--csv",
+        action="store_true",
+        help="Output in CSV format",
+    )
+
     aliases_parser.add_argument(
         "--aliases",
         type=str,
@@ -106,7 +127,7 @@ def parse_args(argv: Sequence[str | Path] | None = None) -> argparse.Namespace:
 
     args: argparse.Namespace = parser.parse_args([str(a) for a in (argv or [])])
 
-    # Set by-alias as default if no format option is specified
+    # Set default format options
     if args.command == "references" and not any(
         [
             getattr(args, "by_alias", False),
@@ -116,12 +137,20 @@ def parse_args(argv: Sequence[str | Path] | None = None) -> argparse.Namespace:
         ]
     ):
         args.by_alias = True
+    elif args.command == "aliases" and not any(
+        [
+            getattr(args, "text", False),
+            getattr(args, "json", False),
+            getattr(args, "csv", False),
+        ]
+    ):
+        args.text = True
     return args
 
 
 def format_by_object(
-    references: dict[str, list[Reference]],
-) -> dict[str, dict[str, dict[str, list[Reference]]]]:
+    references: dict[str, list[BaseReference]],
+) -> dict[str, dict[str, dict[str, list[BaseReference]]]]:
     """Format references grouped by file and object.
 
     Args:
@@ -140,11 +169,11 @@ def format_by_object(
     """
     if not references:
         return {}
-    by_file_obj: dict[str, dict[str, dict[str, list[Reference]]]] = {}
+    by_file_obj: dict[str, dict[str, dict[str, list[BaseReference]]]] = {}
     alias: str
-    refs: list[Reference]
+    refs: list[BaseReference]
     for alias, refs in references.items():
-        ref: Reference
+        ref: BaseReference
         for ref in refs:
             if ref.filename is not None:
                 if ref.filename not in by_file_obj:
@@ -158,8 +187,8 @@ def format_by_object(
 
 
 def format_by_file(
-    references: dict[str, list[Reference]],
-) -> dict[str, dict[str, list[Reference]]]:
+    references: dict[str, list[BaseReference]],
+) -> dict[str, dict[str, list[BaseReference]]]:
     """Format references grouped by file and alias.
 
     Args:
@@ -176,11 +205,11 @@ def format_by_file(
     """
     if not references:
         return {}
-    by_file: dict[str, dict[str, list[Reference]]] = {}
+    by_file: dict[str, dict[str, list[BaseReference]]] = {}
     alias: str
-    refs: list[Reference]
+    refs: list[BaseReference]
     for alias, refs in references.items():
-        ref: Reference
+        ref: BaseReference
         for ref in refs:
             if ref.filename is not None:
                 if ref.filename not in by_file:
@@ -193,7 +222,7 @@ def format_by_file(
 
 def process_references(
     file_paths: list[Path], aliases: str | None = None
-) -> tuple[dict[str, list[Reference]], set[str]]:
+) -> tuple[dict[str, list[BaseReference]], set[str]]:
     """Process files and get references.
 
     Args:
@@ -216,7 +245,9 @@ def process_references(
     return outputter.references, collector.processed_files
 
 
-def print_references(references: dict[str, list[Reference]], output_format: str, processed_files: set[str]) -> None:
+def print_references(
+    references: dict[str, list[BaseReference]], output_format: str, processed_files: set[str]
+) -> None:
     """Print references in the specified format.
 
     Args:
@@ -272,90 +303,47 @@ def handle_get_properties(_args: argparse.Namespace, file_paths: list[Path]) -> 
         return 1
 
 
-def _filter_aliases_by_patterns(aliases: set[str], patterns: str) -> set[str]:
-    """Filter aliases by comma-separated patterns.
-
-    Args:
-        aliases: Set of aliases to filter
-        patterns: Comma-separated patterns to match against
-
-    Returns:
-        Filtered set of aliases
-    """
-    filtered = set()
-    for pattern in patterns.split(","):
-        for alias in aliases:
-            if fnmatch.fnmatch(alias, pattern):
-                filtered.add(alias)
-    return filtered
-
-
-def _process_single_file(path: Path, patterns: str | None = None) -> tuple[bool, set[str], Path]:
-    """Process a single file to extract aliases.
-
-    Args:
-        path: Path to the file to process
-        patterns: Optional patterns to filter aliases
-
-    Returns:
-        Tuple of (success, found aliases, path)
-    """
-    try:
-        aliases = get_cell_aliases(path)
-        if not aliases:
-            print(f"No aliases found for {path}")
-            return False, set(), path
-
-        if patterns:
-            aliases = _filter_aliases_by_patterns(aliases, patterns)
-
-        return True, aliases, path
-
-    except (InvalidFileError, XMLParseError) as e:
-        print(f"{path} is not a valid FCStd file: {e}", file=sys.stderr)
-        return False, set(), path
-    except Exception as e:
-        print(f"Error processing {path}: {e}", file=sys.stderr)
-        return False, set(), path
-
-
-def handle_get_aliases(args: argparse.Namespace, file_paths: list[Path]) -> int:
+def handle_get_aliases(args: argparse.Namespace, files: list[Path]) -> int:
     """Handle get-aliases command.
 
     Args:
         args: Command line arguments
-        file_paths: List of file paths to process
+        files: List of files to process
 
     Returns:
-        Exit code (0 for success, non-zero for error)
+        Exit code
     """
     try:
+        file_aliases: set[str]
+        all_aliases: set[str] = set()
         success = False
-        found_aliases: set[str] = set()
-        last_path: Path | None = None
 
-        for path in file_paths:
-            file_success, aliases, current_path = _process_single_file(path, args.aliases)
-            success = success or file_success
-            found_aliases.update(aliases)
-            if file_success:
-                last_path = current_path
+        for path in valid_files(files):
+            try:
+                file_aliases = get_cell_aliases(path)
+                file_aliases = _filter_aliases(file_aliases, args.aliases)
+                all_aliases.update(file_aliases)
+                success = True
+            except (InvalidFileError, XMLParseError) as e:
+                logger.error("%s: %s", path, e)
+                continue
 
-        if found_aliases and last_path:
-            print(f"Aliases found for {last_path}:")
-            for alias in sorted(found_aliases):
-                print(f"  {alias}")
+        if not all_aliases:
+            logger.warning("No aliases found")
 
-        return 0 if success else 1
-
+        if success:
+            outputter = AliasOutputter(all_aliases)
+            outputter.output(args)
+            return 0
+        return 1
     except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
+        logger.error("Error: %s", e)
         return 1
 
 
 def _filter_references_by_patterns(
-    references: dict[str, list[Reference]], patterns: str
-) -> dict[str, list[Reference]]:
+    references: dict[str, list[BaseReference]], patterns: str
+) -> dict[str, list[BaseReference]]:
     """Filter references by alias patterns.
 
     Args:
@@ -365,13 +353,34 @@ def _filter_references_by_patterns(
     Returns:
         Filtered dictionary of references
     """
-    filtered_refs: dict[str, list[Reference]] = {}
+    filtered_refs: dict[str, list[BaseReference]] = {}
     for alias, refs in references.items():
         for pattern in patterns.split(","):
             if pattern and fnmatch.fnmatch(alias, pattern):
                 filtered_refs[alias] = refs
                 break
     return filtered_refs
+
+
+def _filter_aliases(aliases: set[str], patterns: str) -> set[str]:
+    """Filter aliases by patterns.
+
+    Args:
+        aliases: Set of aliases to filter
+        patterns: Comma-separated patterns to match against
+
+    Returns:
+        Filtered set of aliases
+    """
+    if not patterns:
+        return aliases
+    filtered_aliases: set[str] = set()
+    for alias in aliases:
+        for pattern in patterns.split(","):
+            if pattern and fnmatch.fnmatch(alias, pattern):
+                filtered_aliases.add(alias)
+                break
+    return filtered_aliases
 
 
 def _determine_output_format(args: argparse.Namespace) -> str:
@@ -413,16 +422,15 @@ def _output_references(outputter: ReferenceOutputter, output_format: str) -> Non
         outputter: ReferenceOutputter instance
         output_format: Output format to use
     """
-    if output_format == "json":
-        print(outputter.to_json())
-    elif output_format == "csv":
-        outputter.to_csv()
-    elif output_format == "by_object":
-        outputter.print_by_object()
-    elif output_format == "by_file":
-        outputter.print_by_file()
-    else:
-        outputter.print_by_alias()
+    # Create a mock args object with the appropriate format flag set
+    mock_args = argparse.Namespace(
+        json=output_format == "json",
+        csv=output_format == "csv",
+        by_object=output_format == "by_object",
+        by_file=output_format == "by_file",
+        by_alias=output_format == "by_alias",
+    )
+    outputter.output(mock_args)
 
 
 def handle_get_references(args: argparse.Namespace, file_paths: list[Path]) -> int:

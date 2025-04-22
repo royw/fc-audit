@@ -6,8 +6,8 @@ import json
 
 import pytest
 
-from fc_audit.output import ReferenceOutputter
 from fc_audit.reference_collector import Reference
+from fc_audit.reference_outputter import ReferenceOutputter
 
 
 @pytest.fixture

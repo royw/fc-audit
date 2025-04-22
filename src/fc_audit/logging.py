@@ -38,13 +38,13 @@ def setup_logging(log_file: str | None = None, verbose: bool = False) -> None:
             # Add stderr handler after error
             logger.add(sys.stderr, colorize=False, level=level)
             # Log startup message
-            logger.info("Starting fc-audit")
-            logger.info(f"Log level: {level}")
+            logger.debug("Starting fc-audit")
+            logger.debug(f"Log level: {level}")
             return
 
     # Add stderr handler
     logger.add(sys.stderr, colorize=False, level=level)
 
     # Log startup message
-    logger.info("Starting fc-audit")
-    logger.info(f"Log level: {level}")
+    logger.debug("Starting fc-audit")
+    logger.debug(f"Log level: {level}")

@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import argparse
+import csv
 import fnmatch
 import json
+import sys
 from collections.abc import Sequence
 
 from .reference_collector import Reference
@@ -135,17 +138,13 @@ class ReferenceOutputter:
             print("No alias references found")
             return
 
-        # Print header
-        print("alias,filename,object_name,expression")
+        writer = csv.writer(sys.stdout, quoting=csv.QUOTE_ALL)
+        writer.writerow(["alias", "filename", "object_name", "expression"])
 
-        # Print data rows
+        # Write data rows
         for alias in sorted(self.references):
             for ref in sorted(self.references[alias], key=lambda r: (r.filename or "", r.object_name)):
-                # Escape quotes in fields and wrap in quotes
-                filename = ref.filename or ""
-                object_name = ref.object_name.replace('"', '""')
-                expression = ref.expression.replace('"', '""')
-                print(f'"{alias}","{filename}","{object_name}","{expression}"')
+                writer.writerow([alias, ref.filename or "", ref.object_name, ref.expression])
 
     def print_by_object(self) -> None:
         """Print references grouped by object name."""
@@ -243,3 +242,20 @@ class ReferenceOutputter:
             print("\nFiles with no references:")
             for filename in sorted(empty_files):
                 print(f"Note: {filename} contains no spreadsheet references")
+
+    def output(self, args: argparse.Namespace) -> None:
+        """Output references in the specified format based on command line arguments.
+
+        Args:
+            args: Command line arguments namespace
+        """
+        if args.json:
+            print(self.to_json())
+        elif args.csv:
+            self.to_csv()
+        elif args.by_object:
+            self.print_by_object()
+        elif args.by_file:
+            self.print_by_file()
+        else:
+            self.print_by_alias()
