@@ -512,3 +512,50 @@ You can run all quality checks at once with:
 ```bash
 task ci
 ```
+
+### Publishing
+
+**Note: Package publishing should only be performed by the official package maintainer. If you need a new release, please open an issue or submit a pull request.**
+
+The project uses `twine` for publishing to PyPI and TestPyPI. While `uv publish` is available, we use `twine` because:
+1. It's more mature and reliable for package publishing
+2. It handles first-time package uploads better
+3. It provides better error messages and upload status feedback
+
+To publish the package, you need to:
+
+1. Set up your PyPI credentials in `~/.pypirc` and secure it:
+```ini
+[distutils]
+index-servers =
+    pypi
+    testpypi
+
+[pypi]
+username = __token__
+password = your-pypi-token
+
+[testpypi]
+username = __token__
+password = your-testpypi-token
+```
+
+Make sure to restrict access to the credentials file:
+```bash
+chmod 600 ~/.pypirc
+```
+
+2. Publish the package:
+```bash
+# Publish to TestPyPI first (automatically runs build task)
+task publish-test-pypi
+
+# If everything looks good, publish to PyPI (automatically runs build task)
+task publish-pypi
+```
+
+Note: Both publish tasks have `deps: [build]` configured, so they will automatically run the build task which cleans the `dist/` directory and creates fresh wheel and sdist distributions.
+
+The package will be available at:
+- TestPyPI: https://test.pypi.org/project/fc-audit/
+- PyPI: https://pypi.org/project/fc-audit/

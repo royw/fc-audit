@@ -157,6 +157,7 @@ tasks:
   build:
     desc: Build package distribution
     cmds:
+      - rm -rf dist/
       - task: build:wheel
       - task: build:sdist
 
@@ -169,3 +170,15 @@ tasks:
     desc: Build source distribution
     cmds:
       - uv run python -m build --sdist
+
+  publish-test-pypi:
+    desc: Publish to the test.pypi.org server
+    deps: [build]
+    cmds:
+      - uv run twine upload --repository testpypi dist/*
+
+  publish-pypi:
+    desc: Publish to the pypi.org server
+    deps: [build]
+    cmds:
+      - uv run twine upload dist/*
