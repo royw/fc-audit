@@ -197,6 +197,21 @@ Also can output JSON
     }
   ]
 }
+
+### Properties --filter
+
+Not sure how useful this is, but here it is...
+```
+➤ fc-audit properties --filter "Link*" LiftFan.FCStd
+LinkClaimChild
+LinkCopyOnChange
+LinkCopyOnChangeGroup
+LinkCopyOnChangeSource
+LinkCopyOnChangeTouched
+LinkExecute
+LinkPlacement
+LinkTransform
+LinkedObject
 ```
 ---
 

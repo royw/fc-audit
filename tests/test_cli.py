@@ -666,20 +666,43 @@ def test_references_csv_sort_order(capsys: pytest.CaptureFixture[str]) -> None:
 
 def test_references_format_conflict() -> None:
     """Test that incompatible format options raise an error."""
+    # Test that --by-object and --by-file can't be used together
     with pytest.raises(SystemExit):
-        parse_args(["references", "--by-alias", "--by-object", "test.FCStd"])
+        parse_args(["references", "file.FCStd", "--by-object", "--by-file"])
 
+    # Test that --by-object and --json can't be used together
     with pytest.raises(SystemExit):
-        parse_args(["references", "--json", "--csv", "test.FCStd"])
+        parse_args(["references", "file.FCStd", "--by-object", "--json"])
 
+    # Test that --by-file and --json can't be used together
     with pytest.raises(SystemExit):
-        parse_args(["references", "--by-file", "--by-object", "test.FCStd"])
+        parse_args(["references", "file.FCStd", "--by-file", "--json"])
 
+    # Test that --by-alias and --json can't be used together
     with pytest.raises(SystemExit):
-        parse_args(["references", "--by-file", "--json", "test.FCStd"])
+        parse_args(["references", "file.FCStd", "--by-alias", "--json"])
 
+
+def test_aliases_no_by_options() -> None:
+    """Test that aliases command does not support --by-* options."""
+    # Test that --by-object is not supported
     with pytest.raises(SystemExit):
-        parse_args(["references", "--by-alias", "--csv", "test.FCStd"])
+        parse_args(["aliases", "file.FCStd", "--by-object"])
+
+    # Test that --by-file is not supported
+    with pytest.raises(SystemExit):
+        parse_args(["aliases", "file.FCStd", "--by-file"])
+
+    # Test that --by-alias is not supported
+    with pytest.raises(SystemExit):
+        parse_args(["aliases", "file.FCStd", "--by-alias"])
+
+
+def test_properties_no_by_alias() -> None:
+    """Test that properties command does not support --by-alias option."""
+    # Test that --by-alias is not supported
+    with pytest.raises(SystemExit):
+        parse_args(["properties", "file.FCStd", "--by-alias"])
 
 
 def test_references_invalid_files(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

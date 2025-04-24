@@ -8,6 +8,7 @@
 # - DEV_VERSION (3.12) is the primary development version
 # - Virtual environments are created for each version (.venv-3.11, .venv-3.12, .venv-3.13)
 # - .venv symlink points to the development version's environment
+# - tasks should always use .venv/bin/python except when managing the environment
 #
 # Environment:
 # - task setup: Set up development environment (creates all version environments)
@@ -143,7 +144,7 @@ tasks:
     desc: Run tests with coverage report
     cmds:
       - uv run --python .venv/bin/python pytest -vv --cov --cov-report=term-missing
-      - python -c "import sys; exit(1) if float('{{.COVERAGE_MIN}}') > float('$(uv run --python .venv/bin/python coverage report | grep TOTAL | awk '{print $4}' | tr -d '%')') else exit(0)"
+      - .venv/bin/python -c "import sys; exit(1) if float('{{.COVERAGE_MIN}}') > float('$(uv run --python .venv/bin/python coverage report | grep TOTAL | awk '{print $4}' | tr -d '%')') else exit(0)"
 
   test:pythons:
     desc: Run tests and checks (ruff, mypy, pytest) across all Python versions
@@ -229,22 +230,22 @@ tasks:
   build:wheel:
     desc: Build wheel distribution
     cmds:
-      - uv run --python {{.DEV_VERSION}} python -m build --wheel
+      - uv run .venv/bin/python -m build --wheel
 
   build:sdist:
     desc: Build source distribution
     cmds:
-      - uv run --python {{.DEV_VERSION}} python -m build --sdist
+      - uv run .venv/bin/python -m build --sdist
 
 # Publishing
   publish-test-pypi:
     desc: Publish to the test.pypi.org server
     deps: [build]
     cmds:
-      - uv run --python {{.DEV_VERSION}} twine upload --repository testpypi dist/*
+      - uv run --python .venv/bin/python twine upload --repository testpypi dist/*
 
   publish-pypi:
     desc: Publish to the pypi.org server
     deps: [build]
     cmds:
-      - uv run --python {{.DEV_VERSION}} twine upload dist/*
+      - uv run --python .venv/bin/python twine upload dist/*

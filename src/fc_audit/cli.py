@@ -96,6 +96,10 @@ def parse_args(argv: Sequence[str | Path] | None = None) -> argparse.Namespace:
         "properties", help="Show document properties from FreeCAD documents"
     )
     properties_parser.add_argument("files", nargs="+", type=Path, help="FreeCAD document files to analyze")
+    properties_parser.add_argument(
+        "--filter",
+        help="Filter properties by pattern (e.g. 'Length*' or '*Width')",
+    )
 
     # Format options for properties
     properties_format_group: argparse._MutuallyExclusiveGroup = properties_parser.add_mutually_exclusive_group()
@@ -312,6 +316,8 @@ def handle_get_properties(args: argparse.Namespace, file_paths: list[Path]) -> i
     """
     try:
         outputter = PropertiesOutputter(file_paths)
+        if args.filter:
+            outputter.filter_properties(args.filter)
         outputter.output(args)
         return 0 if outputter.file_properties else 1
     except Exception as e:

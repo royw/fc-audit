@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import fnmatch
 import json
 import sys
 from pathlib import Path
@@ -29,6 +30,22 @@ class PropertiesOutputter:
                 self.file_properties[filepath] = get_document_properties_with_context(filepath)
             except Exception as e:
                 print(str(e), file=sys.stderr)
+
+    def filter_properties(self, pattern: str) -> None:
+        """Filter properties by pattern.
+
+        Args:
+            pattern: Pattern to match against property names
+        """
+        if not pattern:
+            return
+
+        for filepath in list(self.file_properties.keys()):
+            filtered_props = {}
+            for prop, values in self.file_properties[filepath].items():
+                if fnmatch.fnmatch(prop, pattern):
+                    filtered_props[prop] = values
+            self.file_properties[filepath] = filtered_props
 
     def output_text(self) -> None:
         """Print properties in simple list format."""

@@ -106,12 +106,20 @@ Extract unique property names from one or more FreeCAD documents:
 fc-audit properties *.FCStd
 ```
 
-`fc-audit properties` have the same options as `fc-audit aliases` plus `--by-file` and `--by-object`.
+You can output properties in different formats:
 
 ```bash
-fc-audit properties --by-file *.FCStd
+# Simple list of properties (default)
+fc-audit properties *.FCStd
 
-fc-audit properties --by-object *.FCStd
+# Output as JSON
+fc-audit properties --json *.FCStd
+
+# Output as CSV
+fc-audit properties --csv *.FCStd
+
+# Filter properties by pattern
+fc-audit properties --filter "Shape*" *.FCStd
 ```
 
 ### References
