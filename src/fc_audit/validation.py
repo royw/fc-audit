@@ -1,24 +1,36 @@
-"""
-From: https://stackoverflow.com/questions/9532499/check-whether-a-path-is-valid-in-python-without-creating-a-file-at-the-paths-ta
-"""
+"""Validation functions for FreeCAD files."""
 
 from __future__ import annotations
 
 import errno
 import os
 import sys
+import zipfile
 from pathlib import Path
 
-# Sadly, Python fails to provide the following magic number for us.
-ERROR_INVALID_NAME = 123
-"""
-Windows-specific error code indicating an invalid pathname.
 
-See Also
-----------
-https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes--0-499-
-    Official listing of all such codes.
-"""
+def is_fcstd_file(filepath: Path) -> bool:
+    """Check if a file is a valid FCStd file.
+
+    Args:
+        filepath: Path to the file to check
+
+    Returns:
+        True if the file is a valid FCStd file, False otherwise
+    """
+    if not filepath.is_file():
+        return False
+
+    if not zipfile.is_zipfile(filepath):
+        return False
+
+    with zipfile.ZipFile(filepath) as zf:
+        return "Document.xml" in zf.namelist()
+
+
+# Windows-specific error code indicating an invalid pathname.
+# See: https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes--0-499-
+ERROR_INVALID_NAME = 123
 
 
 def is_pathname_valid(pathname: str) -> bool:

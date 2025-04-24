@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
-from fc_audit.path_valid import ERROR_INVALID_NAME, is_pathname_valid
+from fc_audit.validation import ERROR_INVALID_NAME, is_pathname_valid
 
 
 def test_invalid_input_types() -> None:

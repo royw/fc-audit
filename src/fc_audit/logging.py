@@ -7,7 +7,7 @@ from pathlib import Path
 
 from loguru import logger
 
-from fc_audit.path_valid import is_pathname_valid
+from fc_audit.validation import is_pathname_valid
 
 
 def setup_logging(log_file: str | None = None, verbose: bool = False) -> None:

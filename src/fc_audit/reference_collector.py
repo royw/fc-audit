@@ -6,22 +6,12 @@ import html
 import re
 import xml.etree.ElementTree as ET
 import zipfile
-from dataclasses import dataclass
 from pathlib import Path
 from re import Match
 
 from loguru import logger
 
-
-@dataclass
-class Reference:
-    """A reference to a spreadsheet cell in a FreeCAD document."""
-
-    object_name: str
-    expression: str
-    filename: str | None = None
-    spreadsheet: str | None = None
-    alias: str = ""
+from .reference import Reference
 
 
 class ReferenceCollector:
@@ -62,10 +52,6 @@ class ReferenceCollector:
         Raises:
             ValueError: If file is not a valid FCStd file
         """
-        if not self._is_fcstd_file(filepath):
-            error_msg = f"{filepath} is not a valid FCStd file"
-            raise ValueError(error_msg)
-
         filename: str = filepath.name
         self.processed_files.add(filename)
 
@@ -73,14 +59,6 @@ class ReferenceCollector:
             content: str = f.read().decode("utf-8")
             file_refs: dict[str, list[Reference]] = self._parse_document_references(content, filename)
             self._merge_references(file_refs)
-
-    def _is_fcstd_file(self, filepath: Path) -> bool:
-        """Check if a file is a valid FCStd file."""
-        if not zipfile.is_zipfile(filepath):
-            return False
-
-        with zipfile.ZipFile(filepath) as zf:
-            return "Document.xml" in zf.namelist()
 
     def _parse_document_references(self, content: str, filename: str) -> dict[str, list[Reference]]:
         """Parse XML content to extract all alias references from a Document."""

@@ -176,6 +176,12 @@ tasks:
       - task: lint:ruff
       - task: lint:mypy
       - task: spell
+      - task: deadcode
+
+  deadcode:
+    desc: Check for unused code
+    cmds:
+      - uv run --python .venv/bin/python deadcode --dry src
 
   lint:ruff:
     desc: Run ruff linter

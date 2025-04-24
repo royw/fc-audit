@@ -6,7 +6,6 @@ import html
 import logging
 import re
 import zipfile
-from dataclasses import dataclass
 from pathlib import Path
 from re import Match
 from typing import Any
@@ -16,43 +15,12 @@ from lxml.etree import _Element
 
 from .exceptions import (
     ExpressionError,
-    InvalidFileError,
     ReferenceError,
     XMLParseError,
 )
-from .reference_collector import Reference as BaseReference
+from .reference import Reference
 
 logger = logging.getLogger(__name__)
-
-
-def is_fcstd_file(filepath: Path) -> bool:
-    """Check if a file is a valid FCStd file.
-
-    Args:
-        filepath: Path to file to check
-
-    Returns:
-        True if file is a valid FCStd file, False otherwise
-    """
-    try:
-        if not filepath.is_file():
-            logger.debug("%s is not a file", filepath)
-            return False
-
-        logger.debug("Checking if %s is a valid FCStd file", filepath)
-        if not zipfile.is_zipfile(filepath):
-            logger.debug("%s is not a valid zip file", filepath)
-            return False
-
-        with zipfile.ZipFile(filepath) as zf:
-            files: list[str] = zf.namelist()
-            debug_msg = f"Files in {filepath}: {files}"
-            logger.debug(debug_msg)
-            return "Document.xml" in files
-    except Exception as e:
-        debug_msg = f"Error checking {filepath}: {e}"
-        logger.debug(debug_msg)
-        return False
 
 
 def get_document_properties_with_context(filepath: Path) -> dict[str, list[tuple[str, str]]]:
@@ -65,13 +33,8 @@ def get_document_properties_with_context(filepath: Path) -> dict[str, list[tuple
         Dictionary mapping property names to lists of (object_name, value) tuples
 
     Raises:
-        InvalidFileError: If file is not a valid FCStd file
         XMLParseError: If XML parsing fails
     """
-    if not is_fcstd_file(filepath):
-        error_msg = f"{filepath} is not a valid FCStd file"
-        raise InvalidFileError(error_msg)
-
     try:
         content: str = _read_xml_content(filepath)
         root: _Element = _parse_xml_content(content)
@@ -93,47 +56,7 @@ def get_document_properties_with_context(filepath: Path) -> dict[str, list[tuple
 
         return properties
 
-    except (InvalidFileError, XMLParseError) as e:
-        logger.error(str(e))
-        raise
-    except Exception as e:
-        error_msg = f"Failed to parse properties: {e}"
-        logger.error(error_msg)
-        raise XMLParseError(error_msg) from e
-
-
-def get_document_properties(filepath: Path) -> set[str]:
-    """Extract unique property names from a FreeCAD document.
-
-    Args:
-        filepath: Path to FCStd file
-
-    Returns:
-        Set of unique property names found in the document
-
-    Raises:
-        InvalidFileError: If file is not a valid FCStd file
-        XMLParseError: If XML parsing fails
-    """
-    if not is_fcstd_file(filepath):
-        error_msg = f"{filepath} is not a valid FCStd file"
-        raise InvalidFileError(error_msg)
-
-    try:
-        content: str = _read_xml_content(filepath)
-        root: _Element = _parse_xml_content(content)
-
-        # Find all Property elements
-        properties: set[str] = set()
-        for prop in root.findall(".//Property[@name]"):
-            try:
-                properties.add(str(prop.attrib["name"]))
-            except KeyError:
-                continue
-
-        return properties
-
-    except (InvalidFileError, XMLParseError) as e:
+    except XMLParseError as e:
         logger.error(str(e))
         raise
     except Exception as e:
@@ -152,13 +75,8 @@ def get_cell_aliases(filepath: Path) -> set[str]:
         Set of unique cell aliases found in the document
 
     Raises:
-        InvalidFileError: If file is not a valid FCStd file
         XMLParseError: If XML parsing fails
     """
-    if not is_fcstd_file(filepath):
-        error_msg = f"{filepath} is not a valid FCStd file"
-        raise InvalidFileError(error_msg)
-
     try:
         content: str = _read_xml_content(filepath)
         root: _Element = _parse_xml_content(content)
@@ -175,7 +93,7 @@ def get_cell_aliases(filepath: Path) -> set[str]:
 
         return aliases
 
-    except (InvalidFileError, XMLParseError) as e:
+    except XMLParseError as e:
         logger.error(str(e))
         raise
     except Exception as e:
@@ -227,14 +145,14 @@ def _read_xml_content(filepath: Path) -> str:
                     content: str = f.read().decode("utf-8")
                     if not content.strip().startswith("<?xml"):
                         error_msg = f"Invalid XML content in {filepath}"
-                        raise InvalidFileError(error_msg)
+                        raise XMLParseError(error_msg)
                     return content
             except (KeyError, UnicodeDecodeError) as e:
                 error_msg = f"No Document.xml found in {filepath}: {e}"
-                raise InvalidFileError(error_msg) from e
+                raise XMLParseError(error_msg) from e
     except (zipfile.BadZipFile, OSError) as e:
         error_msg = f"Failed to read {filepath}: {e}"
-        raise InvalidFileError(error_msg) from e
+        raise XMLParseError(error_msg) from e
 
 
 def _parse_xml_content(content: str) -> _Element:
@@ -257,125 +175,6 @@ def _parse_xml_content(content: str) -> _Element:
         error_msg = f"Failed to parse XML content: {e}"
         logger.error(error_msg)
         raise XMLParseError(error_msg) from e
-
-
-def _extract_expression(element: _Element | None, root: _Element) -> tuple[str, str]:
-    """Extract expression from an XML element.
-
-        Args:
-            element: Element to extract expression from
-            root: Root element of the XML tree
-    {{ ... }}
-
-        Returns:
-            Tuple of (parent context string, expression value)
-
-        Raises:
-            ExpressionError: If element is None or has no expression attribute
-    """
-    if element is None:
-        return "unknown", ""
-
-    # Get the expression value
-    if "ExpressionEngine" not in element.attrib:
-        error_msg = "Element must have an ExpressionEngine attribute"
-        raise ExpressionError(error_msg)
-    value = str(element.attrib["ExpressionEngine"])
-
-    # Find parent with identifier
-    parent, context = _find_parent_with_identifier(element, root)
-    if parent is None:
-        error_msg = "No parent with identifier found"
-        raise ExpressionError(error_msg)
-
-    return context, value
-
-
-def _make_unique_key(base_key: str, existing_keys: set[str]) -> str:
-    """Create a unique key by appending a counter if needed.
-
-    Args:
-        base_key: Base key to make unique
-        existing_keys: Set of existing keys
-
-    Returns:
-        Unique key
-    """
-    if base_key not in existing_keys:
-        return base_key
-
-    counter = 1
-    while True:
-        key = f"{base_key} ({counter})"
-        if key not in existing_keys:
-            return key
-        counter += 1
-
-
-def get_expressions(filepath: Path) -> dict[str, list[str]]:
-    """Extract expressions from a FreeCAD document.
-
-    Args:
-        filepath: Path to FCStd file
-
-    Returns:
-        Dictionary mapping expression elements to their unescaped expressions
-
-    Raises:
-        InvalidFileError: If file is not a valid FCStd file
-        XMLParseError: If XML parsing fails or nesting depth exceeds limit
-    """
-    if not is_fcstd_file(filepath):
-        error_msg = f"{filepath} is not a valid FCStd file"
-        raise InvalidFileError(error_msg)
-
-    expressions: dict[str, list[str]] = {}
-    try:
-        content: str = _read_xml_content(filepath)
-        root: _Element = _parse_xml_content(content)
-
-        # Find all Property elements with ExpressionEngine attributes
-        expr: _Element
-        for expr in root.findall(".//Property[@ExpressionEngine]"):
-            try:
-                context: str
-                value: str
-                context, value = _extract_expression(expr, root)
-                # Only include expressions that look like references
-                if context != "unknown" and "<<globals>>#<<params>>" in value:
-                    if context not in expressions:
-                        expressions[context] = []
-                    expressions[context].append(value)
-            except ExpressionError as e:
-                error_msg = f"Error parsing expression in {filepath}: {e}"
-                logger.warning(error_msg)
-                continue
-    except InvalidFileError:
-        raise
-    except (etree.ParseError, XMLParseError) as e:
-        error_msg = f"Failed to parse XML content from {filepath}: {e}"
-        logger.error(error_msg)
-        error_msg = f"Failed to parse XML content: {e}"
-        raise XMLParseError(error_msg) from e
-    except Exception as e:
-        error_msg = f"Failed to parse expressions: {e}"
-        logger.error(error_msg)
-        return {}
-
-    return expressions
-
-
-@dataclass
-class Reference(BaseReference):
-    """A reference to a spreadsheet cell in a FreeCAD document.
-
-    Attributes:
-        object_name: Name of the object containing the reference
-        expression: The full expression string containing the reference
-        filename: Optional name of the file containing the reference
-        spreadsheet: Optional name of the spreadsheet containing the referenced cell
-        alias: The alias name of the referenced cell (empty if not found)
-    """
 
 
 def parse_reference(expr: Any) -> str | None:
@@ -547,76 +346,6 @@ def _parse_document_references(content: str, filename: str) -> dict[str, list[Re
         return {}
 
 
-def get_references(filepath: Path) -> dict[str, list[Reference]]:
-    """Extract alias references from a FreeCAD document.
-
-    Args:
-        filepath: Path to FCStd file
-
-    Returns:
-        Dictionary mapping alias names to list of references
-
-    Raises:
-        InvalidFileError: If file is not a valid FCStd file
-        XMLParseError: If XML parsing fails or nesting depth exceeds limit
-    """
-    if not is_fcstd_file(filepath):
-        error_msg = f"{filepath} is not a valid FCStd file"
-        raise InvalidFileError(error_msg)
-
-    try:
-        content: str = _read_xml_content(filepath)
-        return _parse_document_references(content, filepath.name)
-    except InvalidFileError:
-        raise
-    except (etree.ParseError, XMLParseError) as e:
-        error_msg = f"Error parsing {filepath}: {e}"
-        logger.error(error_msg)
-        error_msg2 = f"Failed to parse XML content: {e}"
-        raise XMLParseError(error_msg2) from e
-    except Exception as e:
-        error_msg = f"Unexpected error parsing {filepath}: {e}"
-        logger.error(error_msg)
-        return {}
-
-
-def get_references_from_files(filepaths: list[Path]) -> dict[str, list[Reference]]:
-    """Extract alias references from multiple FreeCAD documents.
-
-    Args:
-        filepaths: List of paths to FCStd files
-
-    Returns:
-        Dictionary mapping alias names to list of references
-
-    Note:
-        This function will attempt to process all files even if some fail.
-        Errors for individual files will be logged but not propagated.
-    """
-    all_references: dict[str, list[Reference]] = {}
-
-    for filepath in filepaths:
-        try:
-            if not is_fcstd_file(filepath):
-                warning_msg = f"Skipping {filepath}: not a valid FCStd file"
-                logger.warning(warning_msg)
-                continue
-
-            references: dict[str, list[Reference]] = get_references(filepath)
-            _merge_references(all_references, references)
-
-        except InvalidFileError as e:
-            logger.warning(str(e))
-        except (XMLParseError, ReferenceError) as e:
-            error_msg = f"Error processing {filepath}: {e}"
-            logger.error(error_msg)
-        except Exception as e:
-            error_msg = f"Unexpected error processing {filepath}: {e}"
-            logger.error(error_msg)
-
-    return all_references
-
-
 def _merge_references(all_references: dict[str, list[Reference]], new_references: dict[str, list[Reference]]) -> None:
     """Merge new references into the existing set of references.
 
@@ -630,77 +359,3 @@ def _merge_references(all_references: dict[str, list[Reference]], new_references
         if alias not in all_references:
             all_references[alias] = []
         all_references[alias].extend(refs)
-
-
-def get_cell_aliases_from_files(filepaths: list[Path]) -> set[str]:
-    """Extract unique cell aliases from multiple FreeCAD documents.
-
-    Args:
-        filepaths: List of paths to FCStd files
-
-    Returns:
-        Set of unique cell aliases found across all documents
-
-    Note:
-        This function will attempt to process all files even if some fail.
-        Errors for individual files will be logged but not propagated.
-    """
-    all_aliases: set[str] = set()
-
-    for filepath in filepaths:
-        try:
-            if not is_fcstd_file(filepath):
-                warning_msg = f"Skipping {filepath}: not a valid FCStd file"
-                logger.warning(warning_msg)
-                continue
-
-            aliases: set[str] = get_cell_aliases(filepath)
-            all_aliases.update(aliases)
-
-        except InvalidFileError as e:
-            logger.warning(str(e))
-        except XMLParseError as e:
-            error_msg = f"Failed to parse XML content from {filepath}: {e}"
-            logger.error(error_msg)
-        except Exception as e:
-            error_msg = f"Unexpected error processing {filepath}: {e}"
-            logger.error(error_msg)
-
-    return all_aliases
-
-
-def get_properties_from_files(filepaths: list[Path]) -> set[str]:
-    """Extract unique property names from multiple FreeCAD documents.
-
-    Args:
-        filepaths: List of paths to FCStd files
-
-    Returns:
-        Set of unique property names found across all documents
-
-    Note:
-        This function will attempt to process all files even if some fail.
-        Errors for individual files will be logged but not propagated.
-    """
-    all_properties = set()
-
-    for filepath in filepaths:
-        try:
-            if not is_fcstd_file(filepath):
-                warning_msg = f"Skipping {filepath}: not a valid FCStd file"
-                logger.warning(warning_msg)
-                continue
-
-            properties: set[str] = get_document_properties(filepath)
-            all_properties.update(properties)
-
-        except InvalidFileError as e:
-            logger.warning(str(e))
-        except XMLParseError as e:
-            error_msg = f"Failed to parse XML content from {filepath}: {e}"
-            logger.error(error_msg)
-        except Exception as e:
-            error_msg = f"Unexpected error processing {filepath}: {e}"
-            logger.error(error_msg)
-
-    return all_properties

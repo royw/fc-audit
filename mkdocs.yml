@@ -72,6 +72,6 @@ nav:
     - Properties Output: reference/properties_outputter.md
     - Reference Collection: reference/reference_collector.md
     - Reference Output: reference/reference_outputter.md
-    - Path Validation: reference/path_valid.md
+    - Validation: reference/validation.md
     - Logging: reference/logging.md
     - Exceptions: reference/exceptions.md

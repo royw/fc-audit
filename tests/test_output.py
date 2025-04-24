@@ -43,48 +43,6 @@ def test_reference_outputter_init(sample_references: dict[str, list[Reference]])
     assert outputter.processed_files == processed_files
 
 
-def test_filter_references_single_pattern(sample_references: dict[str, list[Reference]]) -> None:
-    """Test filtering references with a single pattern."""
-    processed_files = {"Test1.FCStd"}
-    outputter = ReferenceOutputter(sample_references, processed_files)
-
-    outputter.filter_by_patterns(["Length"])
-    filtered = outputter.references
-    assert len(filtered) == 1
-    assert "Length" in filtered
-
-
-def test_filter_references_multiple_patterns(sample_references: dict[str, list[Reference]]) -> None:
-    """Test filtering references with multiple patterns."""
-    processed_files = {"Test1.FCStd"}
-    outputter = ReferenceOutputter(sample_references, processed_files)
-
-    outputter.filter_by_patterns(["Width", "Length"])
-    filtered = outputter.references
-    assert len(filtered) == 2
-    assert "Width" in filtered
-    assert "Length" in filtered
-
-
-def test_filter_references_non_matching_pattern(sample_references: dict[str, list[Reference]]) -> None:
-    """Test filtering references with a non-matching pattern."""
-    processed_files = {"Test1.FCStd"}
-    outputter = ReferenceOutputter(sample_references, processed_files)
-
-    outputter.filter_by_patterns(["NonExistent"])
-    filtered = outputter.references
-    assert len(filtered) == 0
-
-
-def test_filter_references_empty_patterns(sample_references: dict[str, list[Reference]]) -> None:
-    """Test filtering references with empty patterns list."""
-    processed_files = {"Test1.FCStd"}
-    outputter = ReferenceOutputter(sample_references, processed_files)
-
-    outputter.filter_by_patterns([])
-    assert outputter.references == sample_references
-
-
 def test_convert_references_to_json(sample_references: dict[str, list[Reference]]) -> None:
     """Test converting references to JSON format."""
     processed_files = {"Test1.FCStd"}
@@ -135,9 +93,6 @@ def test_empty_references() -> None:
     # Test by-file format
     assert outputter.format_by_file() == {}
 
-    # Test empty files list
-    outputter.print_empty_files()
-
 
 def test_print_by_object(sample_references: dict[str, list[Reference]], capsys: pytest.CaptureFixture[str]) -> None:
     """Test printing references grouped by object."""
@@ -176,17 +131,6 @@ def test_print_by_alias(sample_references: dict[str, list[Reference]], capsys: p
     assert "File: Test1.FCStd" in captured.out
     assert "Object: Box" in captured.out
     assert "Expression: <<globals>>#<<params>>.Length + 10" in captured.out
-
-
-def test_print_empty_files(sample_references: dict[str, list[Reference]], capsys: pytest.CaptureFixture[str]) -> None:
-    """Test printing list of files with no references."""
-    processed_files = {"Test1.FCStd", "Empty.FCStd"}
-    outputter = ReferenceOutputter(sample_references, processed_files)
-
-    outputter.print_empty_files()
-    captured = capsys.readouterr()
-    assert "Files with no references:" in captured.out
-    assert "Empty.FCStd" in captured.out
 
 
 def test_none_filename_handling(sample_references: dict[str, list[Reference]]) -> None:

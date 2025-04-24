@@ -282,6 +282,18 @@ wheels = [
 ]
 
 [[package]]
+name = "deadcode"
+version = "2.4.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "tomli" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c8/ab/1122e6d6392f7860718f16e931b1976d5e579433486a84b09333811e3a6b/deadcode-2.4.1.tar.gz", hash = "sha256:1ba1e22425cf53c4b3f5ddd46e62a86d98479b47f2ac3430ae60910ac8cb318d", size = 37734 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/46/cc/9c27bb3a1224a66740b25d8153cd41051240103fa9aaee119688362c32b6/deadcode-2.4.1-py3-none-any.whl", hash = "sha256:a16b28b601a82d5dc7ebfcab464a6f65e22a99d5684ec4c7907bdb75f8f64050", size = 44621 },
+]
+
+[[package]]
 name = "distlib"
 version = "0.3.9"
 source = { registry = "https://pypi.org/simple" }
@@ -312,6 +324,7 @@ dependencies = [
 dev = [
     { name = "build" },
     { name = "codespell" },
+    { name = "deadcode" },
     { name = "lxml-stubs" },
     { name = "mkdocs" },
     { name = "mkdocs-material" },
@@ -335,6 +348,7 @@ dev = [
 requires-dist = [
     { name = "build", marker = "extra == 'dev'", specifier = ">=1.1.0" },
     { name = "codespell", marker = "extra == 'dev'", specifier = ">=2.2.6" },
+    { name = "deadcode", marker = "extra == 'dev'", specifier = ">=1.1.0" },
     { name = "loguru", specifier = ">=0.7.2" },
     { name = "lxml", specifier = ">=5.1.0" },
     { name = "lxml-stubs", marker = "extra == 'dev'", specifier = ">=0.5.1" },

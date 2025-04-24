@@ -12,17 +12,18 @@ from loguru import logger
 
 from .alias_outputter import AliasOutputter
 from .exceptions import InvalidFileError, XMLParseError
-from .fcstd import get_cell_aliases, is_fcstd_file
+from .fcstd import get_cell_aliases
 from .logging import setup_logging
 from .parser import parse_args
 from .properties_outputter import PropertiesOutputter
-from .reference_collector import Reference as BaseReference
+from .reference import Reference
 from .reference_collector import ReferenceCollector
 from .reference_outputter import ReferenceOutputter
+from .validation import is_fcstd_file
 
 
 def _ensure_reference_path_exists(
-    by_file_obj: dict[str, dict[str, dict[str, list[BaseReference]]]],
+    by_file_obj: dict[str, dict[str, dict[str, list[Reference]]]],
     filename: str,
     object_name: str,
     alias: str,
@@ -44,8 +45,8 @@ def _ensure_reference_path_exists(
 
 
 def format_by_object(
-    references: dict[str, list[BaseReference]],
-) -> dict[str, dict[str, dict[str, list[BaseReference]]]]:
+    references: dict[str, list[Reference]],
+) -> dict[str, dict[str, dict[str, list[Reference]]]]:
     """Format references grouped by file and object.
 
     Args:
@@ -65,7 +66,7 @@ def format_by_object(
     if not references:
         return {}
 
-    by_file_obj: dict[str, dict[str, dict[str, list[BaseReference]]]] = {}
+    by_file_obj: dict[str, dict[str, dict[str, list[Reference]]]] = {}
 
     for alias, refs in references.items():
         for ref in refs:
@@ -77,8 +78,8 @@ def format_by_object(
 
 
 def format_by_file(
-    references: dict[str, list[BaseReference]],
-) -> dict[str, dict[str, list[BaseReference]]]:
+    references: dict[str, list[Reference]],
+) -> dict[str, dict[str, list[Reference]]]:
     """Format references grouped by file and alias.
 
     Args:
@@ -95,11 +96,11 @@ def format_by_file(
     """
     if not references:
         return {}
-    by_file: dict[str, dict[str, list[BaseReference]]] = {}
+    by_file: dict[str, dict[str, list[Reference]]] = {}
     alias: str
-    refs: list[BaseReference]
+    refs: list[Reference]
     for alias, refs in references.items():
-        ref: BaseReference
+        ref: Reference
         for ref in refs:
             if ref.filename is not None:
                 if ref.filename not in by_file:
@@ -110,34 +111,9 @@ def format_by_file(
     return by_file
 
 
-def process_references(
-    file_paths: list[Path], aliases: str | None = None
-) -> tuple[dict[str, list[BaseReference]], set[str]]:
-    """Process files and get references.
-
-    Args:
-        file_paths: List of files to process
-        aliases: Optional comma-separated list of alias patterns
-
-    Returns:
-        Tuple of (references dict, set of processed file names)
-    """
-    # Collect references from all files
-    collector = ReferenceCollector(file_paths)
-    references = collector.collect()
-
-    # Create outputter and filter by alias patterns if provided
-    outputter = ReferenceOutputter(references, collector.processed_files)
-    if aliases:
-        patterns = [p.strip() for p in aliases.split(",") if p.strip()]
-        outputter.filter_by_patterns(patterns)
-
-    return outputter.references, collector.processed_files
-
-
 def _filter_references_by_patterns(
-    references: dict[str, list[BaseReference]], patterns: str
-) -> dict[str, list[BaseReference]]:
+    references: dict[str, list[Reference]], patterns: str
+) -> dict[str, list[Reference]]:
     """Filter references by alias patterns.
 
     Args:
@@ -147,7 +123,7 @@ def _filter_references_by_patterns(
     Returns:
         Filtered dictionary of references
     """
-    filtered_refs: dict[str, list[BaseReference]] = {}
+    filtered_refs: dict[str, list[Reference]] = {}
     for alias, refs in references.items():
         for pattern in patterns.split(","):
             if pattern and fnmatch.fnmatch(alias, pattern):
@@ -262,11 +238,6 @@ def handle_get_references(args: argparse.Namespace, file_paths: list[Path]) -> i
         outputter.output(args)
         return 0
 
-    except (InvalidFileError, XMLParseError) as e:
-        print(f"{file_paths[0]} is not a valid FCStd file: {e}", file=sys.stderr)
-        outputter = ReferenceOutputter({}, set())
-        outputter.no_references_message(args)
-        return 1
     except Exception as e:
         print(f"Error processing files: {e}", file=sys.stderr)
         outputter = ReferenceOutputter({}, set())
@@ -290,12 +261,8 @@ def valid_files(files: list[Path]) -> Iterable[Path]:
         if not path.is_file():
             print(f"Error: '{path.name}' is not a file", file=sys.stderr)
             continue
-        try:
-            if not is_fcstd_file(path):
-                print(f"Error: File '{path.name}' is not a valid FCStd file", file=sys.stderr)
-                continue
-        except Exception as e:
-            logger.error("%s: Error checking file: %s", path, e)
+        if not is_fcstd_file(path):
+            print(f"Error: File '{path.name}' is not a valid FCStd file", file=sys.stderr)
             continue
         yield path
 
@@ -310,26 +277,30 @@ def main(argv: Sequence[str] | None = None) -> int:
         Exit code (0 for success, non-zero for error)
     """
     try:
+        # parse command line arguments
         argv = argv or sys.argv[1:]
         args: argparse.Namespace = parse_args(argv)
 
-        # Configure logging
+        # configure logging
         setup_logging(getattr(args, "log_file", None), getattr(args, "verbose", False))
 
+        # reduce the list of files to process (arg.files) to a list of valid FCStd files
         valid_paths = list(valid_files(args.files))
         if not valid_paths:
             print("No valid files provided", file=sys.stderr)
             return 1
 
-        if args.command == "references":
-            return handle_get_references(args, valid_paths)
-        if args.command == "properties":
-            return handle_get_properties(args, valid_paths)
-        if args.command == "aliases":
-            return handle_get_aliases(args, valid_paths)
-        print(f"Unknown command: {args.command}", file=sys.stderr)
-        return 1
-
+        # dispatch to the appropriate handler based on the command
+        dispatch_table = {
+            "references": handle_get_references,
+            "properties": handle_get_properties,
+            "aliases": handle_get_aliases,
+        }
+        handler = dispatch_table.get(args.command)
+        if handler is None:
+            print(f"Unknown command: {args.command}", file=sys.stderr)
+            return 1
+        return handler(args, valid_paths)
     except Exception as e:
         logger.error("Error: %s", e)
         return 1

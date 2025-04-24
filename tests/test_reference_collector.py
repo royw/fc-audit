@@ -139,7 +139,6 @@ def test_error_handling(tmp_path: Path) -> None:
     non_existent = tmp_path / "non_existent.FCStd"
     collector = ReferenceCollector([non_existent])
 
-    # This should log an error but not raise an exception
-    collector.collect()
-    assert str(non_existent) not in collector.processed_files
-    assert collector.references == {}
+    # This should raise a FileNotFoundError
+    with pytest.raises(FileNotFoundError):
+        collector.collect()

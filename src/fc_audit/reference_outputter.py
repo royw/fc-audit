@@ -4,12 +4,10 @@ from __future__ import annotations
 
 import argparse
 import csv
-import fnmatch
 import json
 import sys
-from collections.abc import Sequence
 
-from .reference_collector import Reference
+from .reference import Reference
 
 
 class ReferenceOutputter:
@@ -24,26 +22,6 @@ class ReferenceOutputter:
         """
         self.references: dict[str, list[Reference]] = references
         self.processed_files: set[str] = processed_files
-
-    def filter_by_patterns(self, patterns: Sequence[str]) -> None:
-        """Filter references by alias patterns.
-
-        Args:
-            patterns: List of glob patterns to match against alias names
-        """
-        if not patterns or not any(patterns):
-            return
-
-        filtered_refs: dict[str, list[Reference]] = {}
-        alias: str
-        refs: list[Reference]
-        for alias, refs in self.references.items():
-            pattern: str
-            for pattern in patterns:
-                if pattern and fnmatch.fnmatch(alias, pattern):
-                    filtered_refs[alias] = refs
-                    break
-        self.references = filtered_refs
 
     def format_by_object(self) -> dict[str, dict[str, dict[str, list[Reference]]]]:
         """Format references grouped by file and object.
@@ -237,22 +215,6 @@ class ReferenceOutputter:
                     print(f"    Object: {obj_name}")
                     for expr in sorted(by_file[filename][obj_name]):
                         print(f"      Expression: {expr}")
-
-    def print_empty_files(self) -> None:
-        """Print list of files that have no references."""
-        # Get set of files that have references
-        files_with_refs: set[str] = set()
-        for refs in self.references.values():
-            for ref in refs:
-                if ref.filename:
-                    files_with_refs.add(ref.filename)
-
-        # Find files that were processed but have no references
-        empty_files: set[str] = self.processed_files - files_with_refs
-        if empty_files:
-            print("Files with no references:")
-            for filename in sorted(empty_files):
-                print(f"Note: {filename} contains no spreadsheet references")
 
     def output(self, args: argparse.Namespace) -> None:
         """Output references in the specified format based on command line arguments.
