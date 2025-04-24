@@ -1,20 +1,27 @@
 # Taskfile for fc-audit project
 # https://taskfile.dev
 #
-# This Taskfile provides a comprehensive set of development tasks:
+# This Taskfile provides commands for managing the project.
 #
-# Development Setup:
-# - task setup: Set up development environment (venv, deps, pre-commit)
-# - task clean: Clean build artifacts and caches
+# Python Version Management:
+# The project supports multiple Python versions (3.11, 3.12, 3.13) with the following setup:
+# - DEV_VERSION (3.12) is the primary development version
+# - Virtual environments are created for each version (.venv-3.11, .venv-3.12, .venv-3.13)
+# - .venv symlink points to the development version's environment
+#
+# Environment:
+# - task setup: Set up development environment (creates all version environments)
+# - task update-env: Update virtual environments with latest dependencies
+# - task clean: Clean build artifacts
+# - task clean:venvs: Remove all virtual environments
 #
 # Testing:
-# - task test: Run pytest (accepts CLI args)
-# - task test:coverage: Run tests with coverage report (min 85% coverage)
+# - task test: Run tests using development Python version
+# - task test:coverage: Run tests with coverage report using development Python version
+# - task test:pythons: Run tests and checks () across all Python versions
 #
-# Code Quality:
-# - task lint: Run all code quality checks
-# - task lint:ruff: Run ruff linter
-# - task lint:mypy: Run type checks
+# Code quality:
+# - task lint: Run code quality checks (ruff, mypy, pre-commit)
 # - task format: Format code with ruff
 # - task metrics: Run code quality metrics
 # - task hooks: Run pre-commit hooks
@@ -34,8 +41,16 @@
 version: '3'
 
 vars:
+  # Default Python interpreter command
   PYTHON: python3
+  # Minimum required test coverage percentage
   COVERAGE_MIN: 85
+  # Primary development Python version
+  DEV_VERSION: "3.12"
+  # Path to development virtual environment
+  DEV_VENV: .venv-{{.DEV_VERSION}}
+  # Space-separated list of supported Python versions
+  PYTHON_VERSIONS: "3.11 3.12 3.13"
 
 tasks:
   # Core tasks
@@ -45,6 +60,7 @@ tasks:
       - task --list-all
     silent: true
 
+  # CI/CD
   ci:
     desc: Run all CI checks
     cmds:
@@ -58,21 +74,44 @@ tasks:
   setup:
     desc: Set up development environment
     cmds:
-      - uv venv
-      - uv pip install -e ".[dev]"
+      - uv python install {{.PYTHON_VERSIONS}}
+      - for: { var: PYTHON_VERSIONS }
+        task: setup:venv
+        vars:
+          VERSION: "{{.ITEM}}"
+      - rm -f .venv
+      - ln -s {{.DEV_VENV}} .venv
       - pre-commit install
+
+  setup:venv:
+    internal: true
+    cmds:
+      - echo "Setting up Python {{.VERSION}} environment"
+      - uv venv --python-preference managed --python {{.VERSION}} .venv-{{.VERSION}}
+      - uv pip install --python .venv-{{.VERSION}}/bin/python -e ".[dev]"
 
   update-env:
     desc: Update virtual environment with latest dependencies
     cmds:
-      - uv pip install --upgrade pip
-      - uv pip install --upgrade -e ".[dev]"
+      - for: { var: PYTHON_VERSIONS }
+        task: update-env:venv
+        vars:
+          VERSION: "{{.ITEM}}"
       - pre-commit install
 
-  sync:
-    desc: Sync all dependencies including dev dependencies from pyproject.toml
+  update-env:venv:
+    internal: true
     cmds:
-      - uv pip install --upgrade -e ".[dev]"
+      - echo "Updating Python {{.VERSION}} environment"
+      - uv pip install --python .venv-{{.VERSION}}/bin/python --upgrade pip
+      - uv pip install --python .venv-{{.VERSION}}/bin/python --upgrade -e ".[dev]"
+
+  update-dev-env:
+    desc: Update development environment with latest dependencies
+    cmds:
+      - task: update-env:venv
+        vars:
+          VERSION: "{{.DEV_VERSION}}"
 
   clean:
     desc: Clean build artifacts
@@ -84,24 +123,50 @@ tasks:
       - find . -type d -name .mypy_cache -exec rm -rf {} +
       - find . -type f -name .coverage -delete
       - find . -type d -name htmlcov -exec rm -rf {} +
+      - for: { var: PYTHON_VERSIONS }
+        cmd: rm -rf .venv-{{.ITEM}}
+
+  clean:venvs:
+    desc: Remove all virtual environments
+    cmds:
+      - rm -rf .venv
+      - for: { var: PYTHON_VERSIONS }
+        cmd: rm -rf .venv-{{.ITEM}}
 
   # Testing
   test:
-    desc: Run tests with pytest
+    desc: Run tests
     cmds:
-      - uv run pytest -vv {{.CLI_ARGS}}
+      - uv run --python .venv/bin/python pytest {{.CLI_ARGS}}
 
   test:coverage:
     desc: Run tests with coverage report
     cmds:
-      - uv run pytest -vv --cov --cov-report=term-missing
-      - python -c "import sys; exit(1) if float('{{.COVERAGE_MIN}}') > float('$(uv run coverage report | grep TOTAL | awk '{print $4}' | tr -d '%')') else exit(0)"
+      - uv run --python .venv/bin/python pytest -vv --cov --cov-report=term-missing
+      - python -c "import sys; exit(1) if float('{{.COVERAGE_MIN}}') > float('$(uv run --python .venv/bin/python coverage report | grep TOTAL | awk '{print $4}' | tr -d '%')') else exit(0)"
+
+  test:pythons:
+    desc: Run tests and checks (ruff, mypy, pytest) across all Python versions
+    cmds:
+      - for: { var: PYTHON_VERSIONS }
+        task: test:python
+        vars:
+          VERSION: "{{.ITEM}}"
+
+  test:python:
+    internal: true
+    cmds:
+      - echo "Testing with Python {{.VERSION}}"
+      # Run tests
+      - uv run --python .venv/bin/python ruff check src tests
+      - uv run --python .venv/bin/python mypy src tests
+      - uv run --python .venv/bin/python pytest -v
 
   # Code quality
   pre-commit:
     desc: Run pre-commit hooks
     cmds:
-      - uv run pre-commit run --all-files
+      - uv run --python .venv/bin/python pre-commit run --all-files
 
   lint:
     desc: Run code quality checks
@@ -114,46 +179,46 @@ tasks:
   lint:ruff:
     desc: Run ruff linter
     cmds:
-      - uv run ruff check src tests
+      - uv run --python .venv/bin/python ruff check src tests
 
   lint:mypy:
     desc: Run type checks
     cmds:
-      - uv run mypy src tests
+      - uv run --python .venv/bin/python mypy src tests
 
   spell:
     desc: Check spelling in code and documentation
     cmds:
-      - uv run codespell src tests docs README.md
+      - uv run --python .venv/bin/python codespell src tests docs README.md
 
   format:
     desc: Format code with ruff
     cmds:
-      - uv run ruff format src tests
+      - uv run --python .venv/bin/python ruff format src tests
 
   metrics:
     desc: Run code quality metrics
     cmds:
-      - uv run radon cc src
-
-  hooks:
-    desc: Run pre-commit hooks
-    cmds:
-      - uv run pre-commit run --all-files
+      - uv run --python .venv/bin/python radon cc src
 
   # Documentation
   docs:
     desc: Build and serve documentation locally
     cmds:
       - task: docs:build
-      - uv run mkdocs serve
+      - uv run --python .venv/bin/python mkdocs serve
 
   docs:build:
     desc: Build documentation
     cmds:
-      - uv run mkdocs build
+      - uv run --python .venv/bin/python mkdocs build
 
-  # Build
+  docs:serve:
+    desc: Serve documentation
+    cmds:
+      - uv run --python .venv/bin/python mkdocs serve
+
+  # Building
   build:
     desc: Build package distribution
     cmds:
@@ -164,21 +229,22 @@ tasks:
   build:wheel:
     desc: Build wheel distribution
     cmds:
-      - uv run python -m build --wheel
+      - uv run --python {{.DEV_VERSION}} python -m build --wheel
 
   build:sdist:
     desc: Build source distribution
     cmds:
-      - uv run python -m build --sdist
+      - uv run --python {{.DEV_VERSION}} python -m build --sdist
 
+# Publishing
   publish-test-pypi:
     desc: Publish to the test.pypi.org server
     deps: [build]
     cmds:
-      - uv run twine upload --repository testpypi dist/*
+      - uv run --python {{.DEV_VERSION}} twine upload --repository testpypi dist/*
 
   publish-pypi:
     desc: Publish to the pypi.org server
     deps: [build]
     cmds:
-      - uv run twine upload dist/*
+      - uv run --python {{.DEV_VERSION}} twine upload dist/*
