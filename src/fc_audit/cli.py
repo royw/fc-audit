@@ -121,8 +121,12 @@ def _filter_references_by_patterns(
         patterns: Comma-separated patterns to match against
 
     Returns:
-        Filtered dictionary of references
+        Filtered dictionary of references. If patterns is empty,
+        returns the original references.
     """
+    if not patterns:
+        return references
+
     filtered_refs: dict[str, list[Reference]] = {}
     for alias, refs in references.items():
         for pattern in patterns.split(","):

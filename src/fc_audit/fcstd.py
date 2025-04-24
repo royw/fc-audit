@@ -15,6 +15,7 @@ from lxml.etree import _Element
 
 from .exceptions import (
     ExpressionError,
+    InvalidFileError,
     ReferenceError,
     XMLParseError,
 )
@@ -44,7 +45,9 @@ def get_document_properties_with_context(filepath: Path) -> dict[str, list[tuple
         for prop in root.findall(".//Property[@name]"):
             try:
                 name = str(prop.attrib["name"])
-                obj_elem, _ = _find_parent_with_identifier(prop, root)
+                obj_elem = prop.getparent()
+                while obj_elem is not None and obj_elem.tag != "Object":
+                    obj_elem = obj_elem.getparent()
                 obj_name = str(obj_elem.attrib.get("name", "unknown")) if obj_elem is not None else "unknown"
                 string_elem = prop.find("String")
                 value = str(string_elem.text) if string_elem is not None and string_elem.text is not None else ""
@@ -102,30 +105,6 @@ def get_cell_aliases(filepath: Path) -> set[str]:
         raise XMLParseError(error_msg) from e
 
 
-def _find_parent_with_identifier(element: _Element, _root: _Element) -> tuple[_Element | None, str]:
-    """Find the nearest ancestor with an identifying attribute and its context string.
-
-    Args:
-        element: Element to find parent for
-        root: Root element of the XML tree
-
-    Returns:
-        Tuple of (parent element, context string) or (None, "unknown")
-        The context string is the name of the parent Object element
-    """
-    # Find the Properties element containing this property
-    parent = element.getparent()
-    while parent is not None:
-        if parent.tag == "Properties":
-            # Get the Object element that contains these Properties
-            obj = parent.getparent()
-            if obj is not None and obj.tag == "Object":
-                return obj, obj.attrib.get("name", "unknown")
-            break
-        parent = parent.getparent()
-    return None, "unknown"
-
-
 def _read_xml_content(filepath: Path) -> str:
     """Read XML content from a FCStd file.
 
@@ -148,11 +127,11 @@ def _read_xml_content(filepath: Path) -> str:
                         raise XMLParseError(error_msg)
                     return content
             except (KeyError, UnicodeDecodeError) as e:
-                error_msg = f"No Document.xml found in {filepath}: {e}"
-                raise XMLParseError(error_msg) from e
+                error_msg = f"Document.xml not found in {filepath}"
+                raise InvalidFileError(error_msg) from e
     except (zipfile.BadZipFile, OSError) as e:
         error_msg = f"Failed to read {filepath}: {e}"
-        raise XMLParseError(error_msg) from e
+        raise InvalidFileError(error_msg) from e
 
 
 def _parse_xml_content(content: str) -> _Element:
@@ -339,11 +318,11 @@ def _parse_document_references(content: str, filename: str) -> dict[str, list[Re
     except XMLParseError:
         error_msg = f"Failed to parse XML content from {filename}"
         logger.error(error_msg)
-        return {}
+        raise
     except Exception as e:
         error_msg = f"Unexpected error parsing {filename}: {e}"
         logger.error(error_msg)
-        return {}
+        raise XMLParseError(error_msg) from e
 
 
 def _merge_references(all_references: dict[str, list[Reference]], new_references: dict[str, list[Reference]]) -> None:
