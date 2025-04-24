@@ -157,7 +157,7 @@ class ReferenceOutputter:
         obj_name: str
         for filename in sorted(by_file_obj):
             for obj_name in sorted(by_file_obj[filename]):
-                print(f"\nObject: {obj_name}")
+                print(f"Object: {obj_name}")
                 print(f"  File: {filename}")
                 # Group by alias and expression
                 by_alias: dict[str, set[str]] = {}
@@ -180,7 +180,7 @@ class ReferenceOutputter:
 
         by_file = self.format_by_file()
         for filename in sorted(by_file):
-            print(f"\nFile: {filename}")
+            print(f"File: {filename}")
             # Group by alias, then object, then expression
             by_alias: dict[str, dict[str, set[str]]] = {}
             for alias in by_file[filename]:
@@ -208,7 +208,7 @@ class ReferenceOutputter:
         alias: str
         ref: Reference
         for alias in sorted(self.references):
-            print(f"\nAlias: {alias}")
+            print(f"Alias: {alias}")
             # Group by file, then object, then expression
             by_file: dict[str, dict[str, set[str]]] = {}
             for ref in self.references[alias]:
@@ -239,7 +239,7 @@ class ReferenceOutputter:
         # Find files that were processed but have no references
         empty_files: set[str] = self.processed_files - files_with_refs
         if empty_files:
-            print("\nFiles with no references:")
+            print("Files with no references:")
             for filename in sorted(empty_files):
                 print(f"Note: {filename} contains no spreadsheet references")
 

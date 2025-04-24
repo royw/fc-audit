@@ -23,20 +23,18 @@ Note: using the --filter option to keep the output short.
 The spreadsheet, params, is in globals.FCStd
 ```
 ➤ fc-audit aliases --filter "Hull*,Cabin*" globals.FCStd
-
-Aliases:
-  CabinCornerRadius
-  CabinHeight
-  CabinLength
-  CabinWallThickness
-  CabinWidth
-  HullFullLength
-  HullFullWidth
-  HullHeight
-  HullLength
-  HullLowerLength
-  HullLowerWidth
-  HullWidth
+CabinCornerRadius
+CabinHeight
+CabinLength
+CabinWallThickness
+CabinWidth
+HullFullLength
+HullFullWidth
+HullHeight
+HullLength
+HullLowerLength
+HullLowerWidth
+HullWidth
 ```
 ---
 
@@ -44,13 +42,11 @@ Aliases:
 
 For references is ok to include the spreadsheet document file, but not necessary
 ```
-➤ fc-audit references --filter "Hull*" Hull.FCStd LiftFan.FCStd globals.FCStd
-
+➤ fc-audit references --filter "Hull*" data/LiftFan.FCStd globals.FCStd
 Alias: HullFullLength
   File: LiftFan.FCStd
     Object: Sketch025
       Expression: <<globals>>#<<params>>.HullFullLength / 2
-
 Alias: HullHeight
   File: Hull.FCStd
     Object: Pad002
@@ -66,22 +62,18 @@ Alias: HullHeight
       Expression: <<globals>>#<<params>>.HullHeight
     Object: Sketch025
       Expression: <<params>>.HullHeight
-
 Alias: HullLength
   File: Hull.FCStd
     Object: Sketch
       Expression: <<globals>>#<<params>>.HullLength
-
 Alias: HullLowerLength
   File: Hull.FCStd
     Object: Sketch
       Expression: <<globals>>#<<params>>.HullLowerLength
-
 Alias: HullLowerWidth
   File: Hull.FCStd
     Object: Sketch
       Expression: <<globals>>#<<params>>.HullLowerWidth
-
 Alias: HullWidth
   File: Hull.FCStd
     Object: Sketch
@@ -94,7 +86,6 @@ Alias: HullWidth
 Not including globals.FCStd
 ```
 ➤ fc-audit references --filter "Hull*" --by-file Hull.FCStd LiftFan.FCStd
-
 File: Hull.FCStd
   Alias: HullHeight
     Object: Pad002
@@ -115,7 +106,6 @@ File: Hull.FCStd
   Alias: HullWidth
     Object: Sketch
       Expression: <<globals>>#<<params>>.HullWidth
-
 File: LiftFan.FCStd
   Alias: HullFullLength
     Object: Sketch025
@@ -135,17 +125,14 @@ File: LiftFan.FCStd
 For brevity, only showing one file
 ```
 ➤ fc-audit references --filter "Hull*" --by-object LiftFan.FCStd
-
 Object: Sketch020
   File: LiftFan.FCStd
     Alias: HullHeight
       Expression: <<params>>.HullHeight
-
 Object: Sketch022
   File: LiftFan.FCStd
     Alias: HullHeight
       Expression: <<globals>>#<<params>>.HullHeight
-
 Object: Sketch025
   File: LiftFan.FCStd
     Alias: HullFullLength
