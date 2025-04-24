@@ -119,44 +119,77 @@ def test_extract_expression() -> None:
     assert val3 == ""
 
 
-def test_parse_reference_valid() -> None:
-    """Test parsing of valid reference expressions.
-    Verifies that the alias name is correctly extracted from expressions
-    in the format '<<globals>>#<<params>>.AliasName'."""
-
+def test_parse_reference_basic() -> None:
+    """Test parsing of basic reference expressions."""
     root = etree.fromstring(
         b"""<?xml version='1.0' encoding='utf-8'?>
 <Document>
     <Object name="Test">
         <Properties>
             <Property name="Test1" ExpressionEngine="&lt;&lt;globals&gt;&gt;#&lt;&lt;params&gt;&gt;.Length"/>
-            <Property name="Test2" ExpressionEngine="&lt;&lt;globals&gt;&gt;#&lt;&lt;params&gt;&gt;.Length * 2"/>
-            <Property name="Test3" ExpressionEngine="&lt;&lt;globals&gt;&gt;#&lt;&lt;params&gt;&gt;.Length_123"/>
-            <Property name="Test4" ExpressionEngine="&lt;&lt;globals&gt;&gt;#&lt;&lt;params&gt;&gt;.Height + 10"/>
         </Properties>
     </Object>
 </Document>"""
     )
-
-    # Test simple reference
     expr1 = root.find(".//Property[@name='Test1']")
     assert expr1 is not None
     assert parse_reference(expr1) == "Length"
 
-    # Test reference with expression
-    expr2 = root.find(".//Property[@name='Test2']")
-    assert expr2 is not None
-    assert parse_reference(expr2) == "Length"
 
-    # Test reference with special characters
-    expr3 = root.find(".//Property[@name='Test3']")
-    assert expr3 is not None
-    assert parse_reference(expr3) == "Length_123"
+def test_parse_reference_with_spaces() -> None:
+    """Test parsing of reference expressions with spaces."""
+    # Test with spaces in the expression
+    expr = "<<globals>>#<<params>>. Length "
+    assert parse_reference(expr) == "Length"
 
-    # Test reference with additional math
-    expr4 = root.find(".//Property[@name='Test4']")
-    assert expr4 is not None
-    assert parse_reference(expr4) == "Height"
+    # Test with spaces in XML
+    root = etree.fromstring(
+        b"""<?xml version='1.0' encoding='utf-8'?>
+<Document>
+    <Object name="Test">
+        <Properties>
+            <Property name="Test1" ExpressionEngine="&lt;&lt;globals&gt;&gt;#&lt;&lt;params&gt;&gt;. Length "/>
+        </Properties>
+    </Object>
+</Document>"""
+    )
+    expr1 = root.find(".//Property[@name='Test1']")
+    assert expr1 is not None
+    assert parse_reference(expr1) == "Length"
+
+
+def test_parse_reference_with_special_chars() -> None:
+    """Test parsing of reference expressions with special characters."""
+    root = etree.fromstring(
+        b"""<?xml version='1.0' encoding='utf-8'?>
+<Document>
+    <Object name="Test">
+        <Properties>
+            <Property name="Test1" ExpressionEngine="&lt;&lt;globals&gt;&gt;#&lt;&lt;params&gt;&gt;.Length_123"/>
+        </Properties>
+    </Object>
+</Document>"""
+    )
+    expr = root.find(".//Property[@name='Test1']")
+    assert expr is not None
+    assert parse_reference(expr) == "Length_123"
+
+
+def test_parse_reference_with_math() -> None:
+    """Test parsing of reference expressions with mathematical operations."""
+    root = etree.fromstring(
+        b"""<?xml version='1.0' encoding='utf-8'?>
+<Document>
+    <Object name="Test">
+        <Properties>
+            <Property name="Test1" ExpressionEngine="&lt;&lt;globals&gt;&gt;#&lt;&lt;params&gt;&gt;.Height + 10"/>
+        </Properties>
+    </Object>
+</Document>"""
+    )
+    expr = root.find(".//Property[@name='Test1']")
+    assert expr is not None
+    assert parse_reference(expr) == "Height"
 
 
 def test_parse_reference_invalid() -> None:

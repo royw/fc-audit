@@ -6,7 +6,6 @@ import argparse
 import fnmatch
 import json
 import sys
-from argparse import _SubParsersAction
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 
@@ -16,169 +15,33 @@ from .alias_outputter import AliasOutputter
 from .exceptions import InvalidFileError, XMLParseError
 from .fcstd import get_cell_aliases, is_fcstd_file
 from .logging import setup_logging
+from .parser import parse_args
 from .properties_outputter import PropertiesOutputter
 from .reference_collector import Reference as BaseReference
 from .reference_collector import ReferenceCollector
 from .reference_outputter import ReferenceOutputter
 
 
-def parse_args(argv: Sequence[str | Path] | None = None) -> argparse.Namespace:
-    """Parse command line arguments.
+def _ensure_reference_path_exists(
+    by_file_obj: dict[str, dict[str, dict[str, list[BaseReference]]]],
+    filename: str,
+    object_name: str,
+    alias: str,
+) -> None:
+    """Ensure all necessary dictionary paths exist for a reference.
 
     Args:
-        argv: Command line arguments
-
-    Returns:
-        Parsed arguments
+        by_file_obj: The target dictionary to update
+        filename: Name of the file containing the reference
+        object_name: Name of the object containing the reference
+        alias: Name of the alias being referenced
     """
-    parser: argparse.ArgumentParser = argparse.ArgumentParser(
-        prog="fc-audit",
-        description="Analyze FreeCAD documents for cell references",
-    )
-    parser.add_argument(
-        "--log-file",
-        type=str,
-        help="Path to log file",
-    )
-    parser.add_argument(
-        "-v",
-        "--verbose",
-        action="store_true",
-        help="Enable verbose output",
-    )
-
-    subparsers: _SubParsersAction[argparse.ArgumentParser] = parser.add_subparsers(
-        dest="command", required=True, description="Commands"
-    )
-
-    # references command
-    references_parser: argparse.ArgumentParser = subparsers.add_parser(
-        "references", help="Show cell references from FreeCAD documents"
-    )
-    references_parser.add_argument("files", nargs="+", type=Path, help="FreeCAD document files to analyze")
-
-    # Format options
-    format_group: argparse._MutuallyExclusiveGroup = references_parser.add_mutually_exclusive_group()
-    format_group.add_argument(
-        "--by-alias",
-        action="store_true",
-        help="Group references by alias (default)",
-    )
-    format_group.add_argument(
-        "--by-object",
-        action="store_true",
-        help="Group references by object",
-    )
-    format_group.add_argument(
-        "--by-file",
-        action="store_true",
-        help="Group references by file",
-    )
-    format_group.add_argument(
-        "--json",
-        action="store_true",
-        help="Output in JSON format",
-    )
-    format_group.add_argument(
-        "--csv",
-        action="store_true",
-        help="Output as comma-separated values",
-    )
-
-    # Filter options
-    references_parser.add_argument(
-        "--filter",
-        help="Filter aliases by pattern (e.g. 'Length*' or '*Width')",
-    )
-
-    # properties command
-    properties_parser: argparse.ArgumentParser = subparsers.add_parser(
-        "properties", help="Show document properties from FreeCAD documents"
-    )
-    properties_parser.add_argument("files", nargs="+", type=Path, help="FreeCAD document files to analyze")
-    properties_parser.add_argument(
-        "--filter",
-        help="Filter properties by pattern (e.g. 'Length*' or '*Width')",
-    )
-
-    # Format options for properties
-    properties_format_group: argparse._MutuallyExclusiveGroup = properties_parser.add_mutually_exclusive_group()
-    properties_format_group.add_argument(
-        "--text",
-        action="store_true",
-        help="Output as simple list of properties (default)",
-    )
-    properties_format_group.add_argument(
-        "--by-file",
-        action="store_true",
-        help="Group properties by file",
-    )
-    properties_format_group.add_argument(
-        "--by-object",
-        action="store_true",
-        help="Group properties by file and object",
-    )
-    properties_format_group.add_argument(
-        "--json",
-        action="store_true",
-        help="Output in JSON format",
-    )
-    properties_format_group.add_argument(
-        "--csv",
-        action="store_true",
-        help="Output as comma-separated values",
-    )
-
-    # aliases command
-    aliases_parser: argparse.ArgumentParser = subparsers.add_parser(
-        "aliases", help="Show cell aliases from FreeCAD documents"
-    )
-    aliases_parser.add_argument("files", nargs="+", type=Path, help="FreeCAD document files to analyze")
-    # Format options
-    aliases_format_group: argparse._MutuallyExclusiveGroup = aliases_parser.add_mutually_exclusive_group()
-    aliases_format_group.add_argument(
-        "--text",
-        action="store_true",
-        help="Output in text format (default)",
-    )
-    aliases_format_group.add_argument(
-        "--json",
-        action="store_true",
-        help="Output in JSON format",
-    )
-    aliases_format_group.add_argument(
-        "--csv",
-        action="store_true",
-        help="Output in CSV format",
-    )
-
-    aliases_parser.add_argument(
-        "--filter",
-        type=str,
-        help="Comma-separated list of patterns to filter by (default: show all)",
-    )
-
-    args: argparse.Namespace = parser.parse_args([str(a) for a in (argv or [])])
-
-    # Set default format options
-    if args.command == "references" and not any(
-        [
-            getattr(args, "by_alias", False),
-            getattr(args, "by_object", False),
-            getattr(args, "by_file", False),
-            getattr(args, "json", False),
-        ]
-    ):
-        args.by_alias = True
-    elif args.command == "aliases" and not any(
-        [
-            getattr(args, "text", False),
-            getattr(args, "json", False),
-            getattr(args, "csv", False),
-        ]
-    ):
-        args.text = True
-    return args
+    if filename not in by_file_obj:
+        by_file_obj[filename] = {}
+    if object_name not in by_file_obj[filename]:
+        by_file_obj[filename][object_name] = {}
+    if alias not in by_file_obj[filename][object_name]:
+        by_file_obj[filename][object_name][alias] = []
 
 
 def format_by_object(
@@ -202,20 +65,15 @@ def format_by_object(
     """
     if not references:
         return {}
+
     by_file_obj: dict[str, dict[str, dict[str, list[BaseReference]]]] = {}
-    alias: str
-    refs: list[BaseReference]
+
     for alias, refs in references.items():
-        ref: BaseReference
         for ref in refs:
             if ref.filename is not None:
-                if ref.filename not in by_file_obj:
-                    by_file_obj[ref.filename] = {}
-                if ref.object_name not in by_file_obj[ref.filename]:
-                    by_file_obj[ref.filename][ref.object_name] = {}
-                if alias not in by_file_obj[ref.filename][ref.object_name]:
-                    by_file_obj[ref.filename][ref.object_name][alias] = []
+                _ensure_reference_path_exists(by_file_obj, ref.filename, ref.object_name, alias)
                 by_file_obj[ref.filename][ref.object_name][alias].append(ref)
+
     return by_file_obj
 
 
@@ -309,20 +167,24 @@ def handle_get_properties(args: argparse.Namespace, file_paths: list[Path]) -> i
 
     Args:
         args: Command line arguments
-        file_paths: List of file paths to process
+        file_paths: List of valid file paths to process
 
     Returns:
         Exit code (0 for success, non-zero for error)
     """
-    try:
-        outputter = PropertiesOutputter(file_paths)
-        if args.filter:
-            outputter.filter_properties(args.filter)
-        outputter.output(args)
-        return 0 if outputter.file_properties else 1
-    except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
+    success = False
+
+    for path in file_paths:
+        try:
+            outputter = PropertiesOutputter([path])
+            if args.filter:
+                outputter.filter_properties(args.filter)
+            outputter.output(args)
+            success = True
+        except Exception as e:
+            print(f"Error: {e}", file=sys.stderr)
+
+    return 0 if success else 1
 
 
 def handle_get_aliases(args: argparse.Namespace, files: list[Path]) -> int:
@@ -330,7 +192,7 @@ def handle_get_aliases(args: argparse.Namespace, files: list[Path]) -> int:
 
     Args:
         args: Command line arguments
-        files: List of files to process
+        files: List of valid files to process
 
     Returns:
         Exit code
@@ -340,7 +202,7 @@ def handle_get_aliases(args: argparse.Namespace, files: list[Path]) -> int:
         all_aliases: set[str] = set()
         success = False
 
-        for path in valid_files(files):
+        for path in files:
             try:
                 file_aliases = get_cell_aliases(path)
                 file_aliases = _filter_aliases(file_aliases, args.filter)
@@ -348,16 +210,14 @@ def handle_get_aliases(args: argparse.Namespace, files: list[Path]) -> int:
                 success = True
             except (InvalidFileError, XMLParseError) as e:
                 logger.error("%s: %s", path, e)
-                continue
 
         if not all_aliases:
             logger.warning("No aliases found")
 
-        if success:
-            outputter = AliasOutputter(all_aliases)
-            outputter.output(args)
-            return 0
-        return 1
+        outputter = AliasOutputter(all_aliases)
+        outputter.output(args)
+
+        return 0 if success else 1
     except Exception as e:
         logger.error("Error: %s", e)
         return 1
@@ -460,7 +320,7 @@ def handle_get_references(args: argparse.Namespace, file_paths: list[Path]) -> i
 
     Args:
         args: Command line arguments
-        file_paths: List of file paths to process.
+        file_paths: List of valid file paths to process.
 
     Returns:
         Exit code (0 for success, non-zero for error)
@@ -491,24 +351,24 @@ def handle_get_references(args: argparse.Namespace, file_paths: list[Path]) -> i
 
 
 def valid_files(files: list[Path]) -> Iterable[Path]:
-    """Filter out non-existent files from the list.
+    """Filter out non-existent files and invalid FCStd files from the list.
 
     Args:
         files: List of file paths to validate
 
     Returns:
-        Iterator of valid file paths
+        Iterator of valid FCStd file paths
     """
     for path in files:
         if not path.exists():
-            logger.error("%s: File not found", path)
+            print(f"Error: File '{path.name}' not found", file=sys.stderr)
             continue
         if not path.is_file():
-            logger.error("%s: Not a file", path)
+            print(f"Error: '{path.name}' is not a file", file=sys.stderr)
             continue
         try:
             if not is_fcstd_file(path):
-                logger.error("%s: Not a valid FCStd file", path)
+                print(f"Error: File '{path.name}' is not a valid FCStd file", file=sys.stderr)
                 continue
         except Exception as e:
             logger.error("%s: Error checking file: %s", path, e)
@@ -532,19 +392,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         # Configure logging
         setup_logging(getattr(args, "log_file", None), getattr(args, "verbose", False))
 
-        files = list(valid_files(args.files))
-        if not files:
+        valid_paths = list(valid_files(args.files))
+        if not valid_paths:
             print("No valid files provided", file=sys.stderr)
             return 1
 
-        if args.command == "properties":
-            return handle_get_properties(args, files)
-        if args.command == "aliases":
-            return handle_get_aliases(args, files)
         if args.command == "references":
-            return handle_get_references(args, files)
-        logger.error("Unknown command: %s", args.command)
+            return handle_get_references(args, valid_paths)
+        if args.command == "properties":
+            return handle_get_properties(args, valid_paths)
+        if args.command == "aliases":
+            return handle_get_aliases(args, valid_paths)
+        print(f"Unknown command: {args.command}", file=sys.stderr)
         return 1
+
     except Exception as e:
         logger.error("Error: %s", e)
         return 1

@@ -43,33 +43,44 @@ def test_reference_outputter_init(sample_references: dict[str, list[Reference]])
     assert outputter.processed_files == processed_files
 
 
-def test_filter_references_by_patterns(sample_references: dict[str, list[Reference]]) -> None:
-    """Test filtering references by patterns."""
+def test_filter_references_single_pattern(sample_references: dict[str, list[Reference]]) -> None:
+    """Test filtering references with a single pattern."""
     processed_files = {"Test1.FCStd"}
     outputter = ReferenceOutputter(sample_references, processed_files)
 
-    # Test with single pattern
     outputter.filter_by_patterns(["Length"])
     filtered = outputter.references
     assert len(filtered) == 1
     assert "Length" in filtered
 
-    # Test with multiple patterns
+
+def test_filter_references_multiple_patterns(sample_references: dict[str, list[Reference]]) -> None:
+    """Test filtering references with multiple patterns."""
+    processed_files = {"Test1.FCStd"}
     outputter = ReferenceOutputter(sample_references, processed_files)
+
     outputter.filter_by_patterns(["Width", "Length"])
     filtered = outputter.references
     assert len(filtered) == 2
     assert "Width" in filtered
     assert "Length" in filtered
 
-    # Test with non-matching pattern
+
+def test_filter_references_non_matching_pattern(sample_references: dict[str, list[Reference]]) -> None:
+    """Test filtering references with a non-matching pattern."""
+    processed_files = {"Test1.FCStd"}
     outputter = ReferenceOutputter(sample_references, processed_files)
+
     outputter.filter_by_patterns(["NonExistent"])
     filtered = outputter.references
     assert len(filtered) == 0
 
-    # Test with empty patterns
+
+def test_filter_references_empty_patterns(sample_references: dict[str, list[Reference]]) -> None:
+    """Test filtering references with empty patterns list."""
+    processed_files = {"Test1.FCStd"}
     outputter = ReferenceOutputter(sample_references, processed_files)
+
     outputter.filter_by_patterns([])
     assert outputter.references == sample_references
 
@@ -128,12 +139,11 @@ def test_empty_references() -> None:
     outputter.print_empty_files()
 
 
-def test_print_methods(sample_references: dict[str, list[Reference]], capsys: pytest.CaptureFixture[str]) -> None:
-    """Test all print methods."""
+def test_print_by_object(sample_references: dict[str, list[Reference]], capsys: pytest.CaptureFixture[str]) -> None:
+    """Test printing references grouped by object."""
     processed_files = {"Test1.FCStd", "Empty.FCStd"}
     outputter = ReferenceOutputter(sample_references, processed_files)
 
-    # Test print_by_object
     outputter.print_by_object()
     captured = capsys.readouterr()
     assert "Object: Box" in captured.out
@@ -141,7 +151,12 @@ def test_print_methods(sample_references: dict[str, list[Reference]], capsys: py
     assert "Alias: Length" in captured.out
     assert "Expression: <<globals>>#<<params>>.Length + 10" in captured.out
 
-    # Test print_by_file
+
+def test_print_by_file(sample_references: dict[str, list[Reference]], capsys: pytest.CaptureFixture[str]) -> None:
+    """Test printing references grouped by file."""
+    processed_files = {"Test1.FCStd", "Empty.FCStd"}
+    outputter = ReferenceOutputter(sample_references, processed_files)
+
     outputter.print_by_file()
     captured = capsys.readouterr()
     assert "File: Test1.FCStd" in captured.out
@@ -149,7 +164,12 @@ def test_print_methods(sample_references: dict[str, list[Reference]], capsys: py
     assert "Object: Box" in captured.out
     assert "Expression: <<globals>>#<<params>>.Length + 10" in captured.out
 
-    # Test print_by_alias
+
+def test_print_by_alias(sample_references: dict[str, list[Reference]], capsys: pytest.CaptureFixture[str]) -> None:
+    """Test printing references grouped by alias."""
+    processed_files = {"Test1.FCStd", "Empty.FCStd"}
+    outputter = ReferenceOutputter(sample_references, processed_files)
+
     outputter.print_by_alias()
     captured = capsys.readouterr()
     assert "Alias: Length" in captured.out
@@ -157,7 +177,12 @@ def test_print_methods(sample_references: dict[str, list[Reference]], capsys: py
     assert "Object: Box" in captured.out
     assert "Expression: <<globals>>#<<params>>.Length + 10" in captured.out
 
-    # Test print_empty_files
+
+def test_print_empty_files(sample_references: dict[str, list[Reference]], capsys: pytest.CaptureFixture[str]) -> None:
+    """Test printing list of files with no references."""
+    processed_files = {"Test1.FCStd", "Empty.FCStd"}
+    outputter = ReferenceOutputter(sample_references, processed_files)
+
     outputter.print_empty_files()
     captured = capsys.readouterr()
     assert "Files with no references:" in captured.out
@@ -193,8 +218,8 @@ def test_none_filename_handling(sample_references: dict[str, list[Reference]]) -
     assert '"filename": null' in json_out
 
 
-def test_multiple_references(sample_references: dict[str, list[Reference]]) -> None:
-    """Test handling of multiple references for the same alias/object/file."""
+def test_multiple_references_by_object(sample_references: dict[str, list[Reference]]) -> None:
+    """Test handling of multiple references in by-object format."""
     # Add another reference with the same alias
     sample_references["Length"].append(
         Reference(
@@ -208,14 +233,28 @@ def test_multiple_references(sample_references: dict[str, list[Reference]]) -> N
     processed_files = {"Test1.FCStd"}
     outputter = ReferenceOutputter(sample_references, processed_files)
 
-    # Test by-object format
     by_obj = outputter.format_by_object()
     box_refs = by_obj["Test1.FCStd"]["Box"]["Length"]
     assert len(box_refs) == 2
     assert any(r.expression == "<<globals>>#<<params>>.Length + 10" for r in box_refs)
     assert any(r.expression == "<<globals>>#<<params>>.Length * 2" for r in box_refs)
 
-    # Test by-file format
+
+def test_multiple_references_by_file(sample_references: dict[str, list[Reference]]) -> None:
+    """Test handling of multiple references in by-file format."""
+    # Add another reference with the same alias
+    sample_references["Length"].append(
+        Reference(
+            filename="Test1.FCStd",
+            object_name="Box",
+            expression="<<globals>>#<<params>>.Length * 2",
+            spreadsheet="params",
+            alias="Length",
+        )
+    )
+    processed_files = {"Test1.FCStd"}
+    outputter = ReferenceOutputter(sample_references, processed_files)
+
     by_file = outputter.format_by_file()
     length_refs = by_file["Test1.FCStd"]["Length"]
     assert len(length_refs) == 2

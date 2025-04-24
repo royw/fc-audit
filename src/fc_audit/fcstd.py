@@ -413,7 +413,7 @@ def parse_reference(expr: Any) -> str | None:
         return None
 
     # Pattern for optional <<n>> or name followed by # then optional <<n>> or name then . then name
-    pattern: str = r"<<globals>>#<<params>>\.([^\s+\-*/()]+)"
+    pattern: str = r"<<globals>>#<<params>>\.\s*([^\s+\-*/()]+)\s*"
     match_obj: Match[str] | None = re.search(pattern, expr_str)
     if match_obj:
         # The alias is always the first group
