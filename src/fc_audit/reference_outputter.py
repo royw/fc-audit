@@ -105,6 +105,17 @@ class ReferenceOutputter:
                     by_file[ref.filename][alias].append(ref)
         return by_file
 
+    def no_references_message(self, args: argparse.Namespace) -> None:
+        """Print message when no references are found.
+
+        Args:
+            args: Command line arguments containing output format flags
+        """
+        if args.json:
+            print(json.dumps({"message": "No alias references found"}))
+        else:
+            print("No alias references found")
+
     def to_json(self) -> str:
         """Convert references to JSON format.
 
@@ -135,7 +146,7 @@ class ReferenceOutputter:
         Format: alias,filename,object_name,expression
         """
         if not self.references:
-            print("No alias references found")
+            self.no_references_message(argparse.Namespace(json=False))
             return
 
         writer = csv.writer(sys.stdout, quoting=csv.QUOTE_ALL)
@@ -149,7 +160,7 @@ class ReferenceOutputter:
     def print_by_object(self) -> None:
         """Print references grouped by object name."""
         if not self.references:
-            print("No alias references found")
+            self.no_references_message(argparse.Namespace(json=False))
             return
 
         by_file_obj = self.format_by_object()
@@ -175,7 +186,7 @@ class ReferenceOutputter:
     def print_by_file(self) -> None:
         """Print references grouped by file and alias."""
         if not self.references:
-            print("No alias references found")
+            self.no_references_message(argparse.Namespace(json=False))
             return
 
         by_file = self.format_by_file()
@@ -202,7 +213,7 @@ class ReferenceOutputter:
     def print_by_alias(self) -> None:
         """Print references grouped by alias name."""
         if not self.references:
-            print("No alias references found")
+            self.no_references_message(argparse.Namespace(json=False))
             return
 
         alias: str
