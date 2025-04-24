@@ -29,9 +29,8 @@ class AliasOutputter:
 
     def output_text(self) -> None:
         """Output aliases in text format."""
-        print("\nAliases:")
         for alias in sorted(self.aliases):
-            print(f"  {alias}")
+            print(alias)
 
     def output_csv(self) -> None:
         """Output aliases in CSV format."""

@@ -59,9 +59,8 @@ def test_output_text(sample_aliases: set[str], capsys: pytest.CaptureFixture[str
     captured = capsys.readouterr()
     lines = captured.out.splitlines()
 
-    assert lines[1] == "Aliases:"
-    assert all(line.startswith("  ") for line in lines[2:])  # Check indentation
-    assert {line.strip() for line in lines[2:]} == sample_aliases
+    assert len(lines) > 0
+    assert {line.strip() for line in lines} == sample_aliases
 
 
 def test_output_text_empty(empty_aliases: set[str], capsys: pytest.CaptureFixture[str]) -> None:
@@ -71,8 +70,7 @@ def test_output_text_empty(empty_aliases: set[str], capsys: pytest.CaptureFixtur
     captured = capsys.readouterr()
     lines = captured.out.splitlines()
 
-    assert lines[1] == "Aliases:"
-    assert len(lines) == 2  # Empty line and header, no aliases
+    assert len(lines) == 0  # no aliases
 
 
 def test_output_csv(sample_aliases: set[str], capsys: pytest.CaptureFixture[str]) -> None:
@@ -131,5 +129,5 @@ def test_output_text_format(sample_aliases: set[str], capsys: pytest.CaptureFixt
     captured = capsys.readouterr()
     lines = captured.out.splitlines()
 
-    assert lines[1] == "Aliases:"
-    assert {line.strip() for line in lines[2:]} == sample_aliases
+    assert len(lines) > 0
+    assert {line.strip() for line in lines} == sample_aliases
