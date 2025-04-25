@@ -1,0 +1,82 @@
+#!/usr/bin/env python3
+
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+# Change to the project root directory
+os.chdir(Path(__file__).parent.parent)
+
+def normalize_output(text):
+    """Remove ANSI color codes and normalize whitespace."""
+    # Remove ANSI color codes
+    text = re.sub(r'\x1b\[[0-9;]*m', '', text)
+    # Remove trailing whitespace and empty lines
+    lines = [line.rstrip() for line in text.splitlines() if line.strip()]
+    return '\n'.join(lines)
+
+def process_code_block(block):
+    """Process a code block containing an fc-audit command."""
+    lines = block.splitlines()
+    command_line = next((line for line in lines if line.startswith('➤')), None)
+
+    if not command_line or not command_line.startswith('➤ fc-audit'):
+        return
+
+    command = command_line.replace('➤ ', '', 1)
+    print(f"Testing command: {command}")
+
+    # Get expected output (everything after the command line)
+    start_idx = lines.index(command_line) + 1
+    expected_output = normalize_output('\n'.join(lines[start_idx:]))
+
+    # Run the command and get actual output
+    try:
+        result = subprocess.run(
+            command,
+            shell=True,
+            cwd='data',
+            capture_output=True,
+            text=True,
+            check=False
+        )
+        actual_output = normalize_output(result.stdout)
+
+        if actual_output == expected_output:
+            print("✓ Output matches\n")
+            return True
+        else:
+            print("✗ Output mismatch")
+            print("Expected output:")
+            print(expected_output)
+            print()
+            print("Actual output:")
+            print(actual_output)
+            print()
+            return False
+    except subprocess.CalledProcessError as e:
+        print(f"Error running command: {e}")
+        return False
+
+def main():
+    with open('ANNOUNCEMENT.md', 'r') as f:
+        content = f.read()
+
+    # Find all code blocks
+    code_blocks = re.findall(r'```[^`]*```', content, re.DOTALL)
+
+    # Process each code block
+    success = True
+    for block in code_blocks:
+        # Remove the backticks and any language identifier
+        block = re.sub(r'^```\w*\n|```$', '', block.strip())
+        if '➤' in block:
+            if not process_code_block(block):
+                success = False
+
+    sys.exit(0 if success else 1)
+
+if __name__ == '__main__':
+    main()

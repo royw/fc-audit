@@ -87,10 +87,9 @@ def test_handle_get_properties_error(mocker: MockerFixture, tmp_path: Path) -> N
 
     class MockArgs(Namespace):
         filter: str | None = None
-        by_object: bool = False
-        by_file: bool = False
         json: bool = False
         csv: bool = False
+        text: bool = True
 
     bad_file = tmp_path / "bad.FCStd"
     bad_file.touch()
@@ -130,10 +129,9 @@ def test_handle_get_properties_output_error(mocker: MockerFixture, tmp_path: Pat
 
     class MockArgs(Namespace):
         filter: str | None = None
-        by_object: bool = False
-        by_file: bool = False
         json: bool = False
         csv: bool = False
+        text: bool = True
 
     bad_file = tmp_path / "bad.FCStd"
     bad_file.touch()
@@ -152,10 +150,9 @@ def test_handle_get_aliases_error(mocker: MockerFixture, tmp_path: Path) -> None
 
     class MockArgs(Namespace):
         filter: str | None = None
-        by_object: bool = False
-        by_file: bool = False
         json: bool = False
         csv: bool = False
+        text: bool = True
 
     bad_file = tmp_path / "bad.FCStd"
     bad_file.touch()
@@ -173,10 +170,9 @@ def test_handle_get_aliases_output_error(mocker: MockerFixture, tmp_path: Path) 
 
     class MockArgs(Namespace):
         filter: str | None = None
-        by_object: bool = False
-        by_file: bool = False
         json: bool = False
         csv: bool = False
+        text: bool = True
 
     bad_file = tmp_path / "bad.FCStd"
     bad_file.touch()
@@ -195,10 +191,9 @@ def test_handle_get_references_error(mocker: MockerFixture, tmp_path: Path) -> N
 
     class MockArgs(Namespace):
         filter: str | None = None
-        by_object: bool = False
-        by_file: bool = False
         json: bool = False
         csv: bool = False
+        text: bool = True
 
     bad_file = tmp_path / "bad.FCStd"
     bad_file.touch()

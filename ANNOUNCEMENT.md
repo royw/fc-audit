@@ -42,7 +42,7 @@ HullWidth
 
 For references is ok to include the spreadsheet document file, but not necessary
 ```
-➤ fc-audit references --filter "Hull*" data/LiftFan.FCStd globals.FCStd
+➤ fc-audit references --filter "Hull*" LiftFan.FCStd Hull.FCStd globals.FCStd
 Alias: HullFullLength
   File: LiftFan.FCStd
     Object: Sketch025
@@ -197,6 +197,8 @@ Also can output JSON
     }
   ]
 }
+```
+---
 
 ### Properties --filter
 

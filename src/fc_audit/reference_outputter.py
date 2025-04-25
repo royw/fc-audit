@@ -222,13 +222,13 @@ class ReferenceOutputter:
         Args:
             args: Command line arguments namespace
         """
-        if args.json:
+        if getattr(args, "json", False):
             print(self.to_json())
-        elif args.csv:
+        elif getattr(args, "csv", False):
             self.to_csv()
-        elif args.by_object:
+        elif getattr(args, "by_object", False):
             self.print_by_object()
-        elif args.by_file:
+        elif getattr(args, "by_file", False):
             self.print_by_file()
         else:
             self.print_by_alias()

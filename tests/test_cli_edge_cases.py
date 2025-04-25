@@ -33,10 +33,9 @@ def test_handle_get_properties_all_files_error(tmp_path: Path, mocker: MockerFix
 
     class MockArgs(Namespace):
         filter: str | None = None
-        by_object: bool = False
-        by_file: bool = False
         json: bool = False
         csv: bool = False
+        text: bool = True
 
     bad_file = tmp_path / "bad.FCStd"
     bad_file.touch()

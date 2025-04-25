@@ -90,6 +90,8 @@ def _add_references_parser(subparsers: _SubParsersAction[argparse.ArgumentParser
         help="Output as comma-separated values",
     )
 
+    references_parser.set_defaults(by_alias=True)
+
     # Filter options
     references_parser.add_argument(
         "--filter",
@@ -106,13 +108,18 @@ def _add_properties_parser(subparsers: _SubParsersAction[argparse.ArgumentParser
     properties_parser = subparsers.add_parser("properties", help="Show document properties from FreeCAD documents")
     properties_parser.add_argument("files", nargs="+", type=Path, help="FreeCAD document files to analyze")
 
+    _add_format_options(properties_parser, text_help="Output as simple list of properties (default)")
+
+    # Set all defaults, including those not used but expected by the outputter
+    properties_parser.set_defaults(
+        text=True,
+    )
+
     # Filter options
     properties_parser.add_argument(
         "--filter",
         help="Filter properties by pattern (e.g. 'Length*' or '*Width')",
     )
-
-    _add_format_options(properties_parser, text_help="Output as simple list of properties (default)")
 
 
 def _add_aliases_parser(subparsers: _SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -125,6 +132,8 @@ def _add_aliases_parser(subparsers: _SubParsersAction[argparse.ArgumentParser]) 
     aliases_parser.add_argument("files", nargs="+", type=Path, help="FreeCAD document files to analyze")
 
     _add_format_options(aliases_parser, text_help="Output in text format (default)")
+
+    aliases_parser.set_defaults(text=True)
 
     # Filter options
     aliases_parser.add_argument(
@@ -150,44 +159,12 @@ def parse_args(argv: Sequence[str | Path] | None = None) -> argparse.Namespace:
     _add_common_options(parser)
 
     # Add subcommands
-    subparsers = parser.add_subparsers(dest="command", required=True, description="Commands")
+    subparsers = parser.add_subparsers(dest="command", required=True)
 
-    _add_references_parser(subparsers)
+    # Create subparsers with their own defaults
     _add_properties_parser(subparsers)
+    _add_references_parser(subparsers)
     _add_aliases_parser(subparsers)
 
-    args = parser.parse_args([str(a) for a in (argv or [])])
-
-    # Set default format options
-    if args.command == "references" and not any(
-        [
-            getattr(args, "by_alias", False),
-            getattr(args, "by_object", False),
-            getattr(args, "by_file", False),
-            getattr(args, "json", False),
-            getattr(args, "csv", False),
-        ]
-    ):
-        args.by_alias = True
-    elif (
-        args.command == "aliases"
-        and not any(
-            [
-                getattr(args, "text", False),
-                getattr(args, "json", False),
-                getattr(args, "csv", False),
-            ]
-        )
-    ) or (
-        args.command == "properties"
-        and not any(
-            [
-                getattr(args, "text", False),
-                getattr(args, "json", False),
-                getattr(args, "csv", False),
-            ]
-        )
-    ):
-        args.text = True
-
-    return args
+    # Parse arguments
+    return parser.parse_args([str(a) for a in (argv or [])])

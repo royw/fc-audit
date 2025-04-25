@@ -636,7 +636,7 @@ def test_references_invalid_files(tmp_path: Path, capsys: pytest.CaptureFixture[
         filter=None,
         json=False,
         csv=True,
-        by_file=False,
+        text=True,
         by_object=False,
         by_alias=False,
     )

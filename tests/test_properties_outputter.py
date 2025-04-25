@@ -36,30 +36,6 @@ def test_output_text(test_files: list[Path], capsys: pytest.CaptureFixture[str])
     assert "Company" in lines
 
 
-def test_output_by_file(test_files: list[Path], capsys: pytest.CaptureFixture[str]) -> None:
-    """Test by-file output format."""
-    outputter = PropertiesOutputter(test_files)
-    outputter.output_by_file()
-    captured = capsys.readouterr()
-
-    # Verify output structure
-    lines = captured.out.splitlines()
-    assert any(line.startswith("File: ") for line in lines)
-    assert any(line.strip() == "Author" for line in lines)
-
-
-def test_output_by_object(test_files: list[Path], capsys: pytest.CaptureFixture[str]) -> None:
-    """Test by-object output format."""
-    outputter = PropertiesOutputter(test_files)
-    outputter.output_by_object()
-    captured = capsys.readouterr()
-
-    # Verify output structure
-    lines = captured.out.splitlines()
-    assert any(line.startswith("File: ") for line in lines)
-    assert any(line.strip().startswith("Object: ") for line in lines)
-
-
 def test_output_json(test_files: list[Path], capsys: pytest.CaptureFixture[str]) -> None:
     """Test JSON output format."""
     outputter = PropertiesOutputter(test_files)
@@ -115,39 +91,17 @@ def test_empty_properties(tmp_path: Path, capsys: pytest.CaptureFixture[str]) ->
 def test_output_text_format_via_args(test_files: list[Path], capsys: pytest.CaptureFixture[str]) -> None:
     """Test output method with text format (default)."""
     outputter = PropertiesOutputter(test_files)
-    args = argparse.Namespace(json=False, csv=False, by_file=False, by_object=False)
+    args = argparse.Namespace(json=False, csv=False)
 
     outputter.output(args)
     captured = capsys.readouterr()
     assert "Author" in captured.out
-
-
-def test_output_by_file_via_args(test_files: list[Path], capsys: pytest.CaptureFixture[str]) -> None:
-    """Test output method with by-file format."""
-    outputter = PropertiesOutputter(test_files)
-    args = argparse.Namespace(json=False, csv=False, by_file=True, by_object=False)
-
-    outputter.output(args)
-    captured = capsys.readouterr()
-    assert "File:" in captured.out
-    assert "Author" in captured.out
-
-
-def test_output_by_object_via_args(test_files: list[Path], capsys: pytest.CaptureFixture[str]) -> None:
-    """Test output method with by-object format."""
-    outputter = PropertiesOutputter(test_files)
-    args = argparse.Namespace(json=False, csv=False, by_file=False, by_object=True)
-
-    outputter.output(args)
-    captured = capsys.readouterr()
-    assert "File:" in captured.out
-    assert "Object:" in captured.out
 
 
 def test_output_json_via_args(test_files: list[Path], capsys: pytest.CaptureFixture[str]) -> None:
     """Test output method with JSON format."""
     outputter = PropertiesOutputter(test_files)
-    args = argparse.Namespace(json=True, csv=False, by_file=False, by_object=False)
+    args = argparse.Namespace(json=True, csv=False)
 
     outputter.output(args)
     captured = capsys.readouterr()
@@ -158,7 +112,7 @@ def test_output_json_via_args(test_files: list[Path], capsys: pytest.CaptureFixt
 def test_output_csv_via_args(test_files: list[Path], capsys: pytest.CaptureFixture[str]) -> None:
     """Test output method with CSV format."""
     outputter = PropertiesOutputter(test_files)
-    args = argparse.Namespace(json=False, csv=True, by_file=False, by_object=False)
+    args = argparse.Namespace(json=False, csv=True)
 
     outputter.output(args)
     captured = capsys.readouterr()

@@ -56,37 +56,6 @@ class PropertiesOutputter:
         for prop in sorted(properties):
             print(prop)
 
-    def output_by_file(self) -> None:
-        """Print properties grouped by file."""
-        for filepath in sorted(self.file_properties.keys()):
-            print(f"\nFile: {filepath}")
-            for prop in sorted(self.file_properties[filepath].keys()):
-                print(f"  {prop}")
-                for _obj_name, value in sorted(self.file_properties[filepath][prop]):
-                    if value:
-                        print(f"    Value: {value}")
-
-    def output_by_object(self) -> None:
-        """Print properties grouped by file and object."""
-        for filepath in sorted(self.file_properties.keys()):
-            print(f"\nFile: {filepath}")
-            # Group properties by object
-            obj_props: dict[str, dict[str, str]] = {}
-            for prop, obj_values in self.file_properties[filepath].items():
-                for obj_name, value in obj_values:
-                    if obj_name not in obj_props:
-                        obj_props[obj_name] = {}
-                    obj_props[obj_name][prop] = value
-
-            for obj_name in sorted(obj_props.keys()):
-                print(f"  Object: {obj_name}")
-                for prop in sorted(obj_props[obj_name].keys()):
-                    value = obj_props[obj_name][prop]
-                    if value:
-                        print(f"    {prop}: {value}")
-                    else:
-                        print(f"    {prop}")
-
     def output_json(self) -> None:
         """Print properties in JSON format."""
         data: list[dict[str, Any]] = []
@@ -118,13 +87,11 @@ class PropertiesOutputter:
         Args:
             args: Namespace containing output format flags
         """
-        if args.json:
+
+        # Get the output format from args
+        if getattr(args, "json", False):
             self.output_json()
-        elif args.csv:
+        elif getattr(args, "csv", False):
             self.output_csv()
-        elif args.by_file:
-            self.output_by_file()
-        elif args.by_object:
-            self.output_by_object()
         else:
             self.output_text()
