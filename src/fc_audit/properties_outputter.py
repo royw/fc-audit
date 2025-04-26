@@ -14,7 +14,27 @@ from fc_audit.fcstd import get_document_properties_with_context
 
 
 class PropertiesOutputter:
-    """Class for outputting FreeCAD document properties in various formats."""
+    """Class for outputting FreeCAD document properties in various formats.
+
+    This class takes a list of FreeCAD files and provides methods to output
+    their properties in different formats. Properties can be filtered by name
+    patterns to focus on specific properties of interest.
+
+    The primary interface is the output(args) method, which uses command-line
+    arguments to determine the output format.
+
+    Supported output formats:
+    - Text (default): List of unique property names
+    - JSON (--json): Detailed property information per file
+    - CSV (--csv): File, object, and property columns
+
+    Example:
+        ```python
+        files = [Path("part1.FCStd"), Path("part2.FCStd")]
+        outputter = PropertiesOutputter(files)
+        outputter.output(args)  # Format determined by args
+        ```
+    """
 
     def __init__(self, filepaths: list[Path]) -> None:
         """Initialize with list of FreeCAD document files.
@@ -47,7 +67,7 @@ class PropertiesOutputter:
                     filtered_props[prop] = values
             self.file_properties[filepath] = filtered_props
 
-    def output_text(self) -> None:
+    def _output_text(self) -> None:
         """Print properties in simple list format."""
         properties: set[str] = set()
         for file_props in self.file_properties.values():
@@ -56,7 +76,7 @@ class PropertiesOutputter:
         for prop in sorted(properties):
             print(prop)
 
-    def output_json(self) -> None:
+    def _output_json(self) -> None:
         """Print properties in JSON format."""
         data: list[dict[str, Any]] = []
         for filepath, props in self.file_properties.items():
@@ -68,7 +88,7 @@ class PropertiesOutputter:
             data.append(file_data)
         print(json.dumps(data, indent=2))
 
-    def output_csv(self) -> None:
+    def _output_csv(self) -> None:
         """Print properties as comma-separated values."""
         writer = csv.writer(sys.stdout, quoting=csv.QUOTE_ALL)
         writer.writerow(["file", "object", "property"])
@@ -90,8 +110,8 @@ class PropertiesOutputter:
 
         # Get the output format from args
         if getattr(args, "json", False):
-            self.output_json()
-        elif getattr(args, "csv", False):
-            self.output_csv()
+            self._output_json()
+        elif args.csv:
+            self._output_csv()
         else:
-            self.output_text()
+            self._output_text()

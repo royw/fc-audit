@@ -1,0 +1,13 @@
+.highlight .gp, .highlight .go { /* Generic.Prompt, Generic.Output */
+    user-select: none;
+}
+/* These CSS classes depend on the handler. */
+.doc-contents details .highlight code {
+    line-height: 0;
+  }
+  .doc-contents details .highlight code > * {
+    line-height: initial;
+  }
+  .doc-contents details .highlight code > .sd {  /* Literal.String.Doc */
+    display: none;
+  }

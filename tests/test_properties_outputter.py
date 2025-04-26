@@ -26,7 +26,7 @@ def test_properties_outputter_init(test_files: list[Path]) -> None:
 def test_output_text(test_files: list[Path], capsys: pytest.CaptureFixture[str]) -> None:
     """Test text output format."""
     outputter = PropertiesOutputter(test_files)
-    outputter.output_text()
+    outputter._output_text()
     captured = capsys.readouterr()
 
     # Verify output structure - just a list of properties
@@ -39,7 +39,7 @@ def test_output_text(test_files: list[Path], capsys: pytest.CaptureFixture[str])
 def test_output_json(test_files: list[Path], capsys: pytest.CaptureFixture[str]) -> None:
     """Test JSON output format."""
     outputter = PropertiesOutputter(test_files)
-    outputter.output_json()
+    outputter._output_json()
     captured = capsys.readouterr()
 
     # Parse JSON output and verify structure
@@ -56,7 +56,7 @@ def test_output_json(test_files: list[Path], capsys: pytest.CaptureFixture[str])
 def test_output_csv(test_files: list[Path], capsys: pytest.CaptureFixture[str]) -> None:
     """Test CSV output format."""
     outputter = PropertiesOutputter(test_files)
-    outputter.output_csv()
+    outputter._output_csv()
     captured = capsys.readouterr()
 
     # Split output into lines and verify
@@ -72,18 +72,18 @@ def test_empty_properties(tmp_path: Path, capsys: pytest.CaptureFixture[str]) ->
     outputter = PropertiesOutputter([empty_file])
 
     # Test text output - should be empty
-    outputter.output_text()
+    outputter._output_text()
     captured = capsys.readouterr()
     assert not captured.out.strip()
 
     # Test JSON output - should be empty list
-    outputter.output_json()
+    outputter._output_json()
     captured = capsys.readouterr()
     output = json.loads(captured.out)
     assert output == []
 
     # Test CSV output - should only have header
-    outputter.output_csv()
+    outputter._output_csv()
     captured = capsys.readouterr()
     assert captured.out.strip() == '"file","object","property"'
 

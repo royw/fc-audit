@@ -31,7 +31,7 @@ def test_init(sample_aliases: set[str]) -> None:
 def test_output_json(sample_aliases: set[str], capsys: pytest.CaptureFixture[str]) -> None:
     """Test JSON output format."""
     outputter = AliasOutputter(sample_aliases)
-    outputter.output_json()
+    outputter._output_json()
     captured = capsys.readouterr()
     output = json.loads(captured.out)
 
@@ -45,7 +45,7 @@ def test_output_json(sample_aliases: set[str], capsys: pytest.CaptureFixture[str
 def test_output_json_empty(empty_aliases: set[str], capsys: pytest.CaptureFixture[str]) -> None:
     """Test JSON output with empty aliases."""
     outputter = AliasOutputter(empty_aliases)
-    outputter.output_json()
+    outputter._output_json()
     captured = capsys.readouterr()
     output = json.loads(captured.out)
 
@@ -55,7 +55,7 @@ def test_output_json_empty(empty_aliases: set[str], capsys: pytest.CaptureFixtur
 def test_output_text(sample_aliases: set[str], capsys: pytest.CaptureFixture[str]) -> None:
     """Test text output format."""
     outputter = AliasOutputter(sample_aliases)
-    outputter.output_text()
+    outputter._output_text()
     captured = capsys.readouterr()
     lines = captured.out.splitlines()
 
@@ -66,7 +66,7 @@ def test_output_text(sample_aliases: set[str], capsys: pytest.CaptureFixture[str
 def test_output_text_empty(empty_aliases: set[str], capsys: pytest.CaptureFixture[str]) -> None:
     """Test text output with empty aliases."""
     outputter = AliasOutputter(empty_aliases)
-    outputter.output_text()
+    outputter._output_text()
     captured = capsys.readouterr()
     lines = captured.out.splitlines()
 
@@ -76,7 +76,7 @@ def test_output_text_empty(empty_aliases: set[str], capsys: pytest.CaptureFixtur
 def test_output_csv(sample_aliases: set[str], capsys: pytest.CaptureFixture[str]) -> None:
     """Test CSV output format."""
     outputter = AliasOutputter(sample_aliases)
-    outputter.output_csv()
+    outputter._output_csv()
     captured = capsys.readouterr()
     lines = captured.out.splitlines()
 
@@ -88,7 +88,7 @@ def test_output_csv(sample_aliases: set[str], capsys: pytest.CaptureFixture[str]
 def test_output_csv_empty(empty_aliases: set[str], capsys: pytest.CaptureFixture[str]) -> None:
     """Test CSV output with empty aliases."""
     outputter = AliasOutputter(empty_aliases)
-    outputter.output_csv()
+    outputter._output_csv()
     captured = capsys.readouterr()
     lines = captured.out.splitlines()
 

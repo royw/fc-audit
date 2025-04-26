@@ -27,16 +27,19 @@ class AliasOutputter:
     methods to output them in different formats. All output methods sort the
     aliases alphabetically for consistent presentation.
 
+    The primary interface is the output(args) method, which uses command-line
+    arguments to determine the output format.
+
     Supported output formats:
-    - Text: One alias per line
-    - JSON: Array of aliases in a JSON object
-    - CSV: Single column with header
+    - Text (default): One alias per line
+    - JSON (--json): Array of aliases in a JSON object
+    - CSV (--csv): Single column with header
 
     Example:
         ```python
         aliases = {"Width", "Height", "Length"}
         outputter = AliasOutputter(aliases)
-        outputter.output_text()  # Prints each alias on a new line
+        outputter.output(args)  # Format determined by args
         ```
     """
 
@@ -50,7 +53,7 @@ class AliasOutputter:
         """
         self.aliases = aliases
 
-    def output_json(self) -> None:
+    def _output_json(self) -> None:
         """Output aliases in JSON format.
 
         Produces a JSON object with an 'aliases' key containing a sorted array
@@ -71,7 +74,7 @@ class AliasOutputter:
         }
         print(json.dumps(output, indent=2))
 
-    def output_text(self) -> None:
+    def _output_text(self) -> None:
         """Output aliases in text format.
 
         Outputs each alias on a separate line in alphabetical order.
@@ -85,7 +88,7 @@ class AliasOutputter:
         for alias in sorted(self.aliases):
             print(alias)
 
-    def output_csv(self) -> None:
+    def _output_csv(self) -> None:
         """Output aliases in CSV format.
 
         Outputs aliases in a single-column CSV format with a header row.
@@ -115,8 +118,8 @@ class AliasOutputter:
                  - (default): Output in text format
         """
         if args.json:
-            self.output_json()
+            self._output_json()
         elif args.csv:
-            self.output_csv()
+            self._output_csv()
         else:
-            self.output_text()
+            self._output_text()

@@ -22,6 +22,7 @@ from .exceptions import (
 from .reference import Reference
 
 logger = logging.getLogger(__name__)
+""" Logger for this module """
 
 
 def _extract_property_value(prop_elem: _Element) -> tuple[str, str] | None:
