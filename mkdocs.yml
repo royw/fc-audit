@@ -33,6 +33,9 @@ theme:
 plugins:
   - search
   - autorefs
+  - gen-files:
+      scripts:
+        - docs/gen_ref_pages.py
   - mkdocstrings:
       default_handler: python
       handlers:
@@ -65,13 +68,15 @@ markdown_extensions:
 nav:
   - Home: index.md
   - API Reference:
-    - CLI: reference/cli.md
-    - FreeCAD Document: reference/fcstd.md
-    - Parser: reference/parser.md
-    - Alias Output: reference/alias_outputter.md
-    - Properties Output: reference/properties_outputter.md
-    - Reference Collection: reference/reference_collector.md
-    - Reference Output: reference/reference_outputter.md
-    - Validation: reference/validation.md
-    - Logging: reference/logging.md
-    - Exceptions: reference/exceptions.md
+      - Overview: reference/index.md
+      - CLI: reference/cli.md
+      - FreeCAD Document: reference/fcstd.md
+      - Parser: reference/parser.md
+      - Alias Output: reference/alias_outputter.md
+      - Properties Output: reference/properties_outputter.md
+      - Reference Collection: reference/reference_collector.md
+      - Reference Output: reference/reference_outputter.md
+      - Validation: reference/validation.md
+      - Logging: reference/logging.md
+      - Exceptions: reference/exceptions.md
+      - Reference Model: reference/reference.md
