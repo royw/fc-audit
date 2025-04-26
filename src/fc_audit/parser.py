@@ -1,4 +1,16 @@
-"""Command line argument parser for fc-audit."""
+"""Command line argument parser for fc-audit.
+
+This module provides the command-line interface for fc-audit, handling argument parsing
+for all supported commands (properties, references, aliases). It defines the structure
+and options for each command, including:
+
+- Format options (text, JSON, CSV)
+- Filtering options
+- Output grouping options
+- Common options (logging, verbosity)
+
+The parser is designed to be user-friendly and follows standard CLI conventions.
+"""
 
 from __future__ import annotations
 
@@ -11,9 +23,22 @@ from pathlib import Path
 def _add_format_options(parser: argparse.ArgumentParser, text_help: str | None = None) -> None:
     """Add common format options to a parser.
 
+    Adds mutually exclusive output format options to the given parser. These options
+    control how the command's output is formatted. Available formats are:
+
+    - text (optional, controlled by text_help)
+    - JSON (for programmatic use)
+    - CSV (for spreadsheet analysis)
+
     Args:
         parser: The parser to add format options to
         text_help: Help text for the --text option. If None, the option is not added.
+
+    Example:
+        If text_help is provided:
+        --text: Output in text format
+        --json: Output in JSON format
+        --csv: Output as comma-separated values
     """
     format_group = parser.add_mutually_exclusive_group()
     if text_help:
@@ -37,6 +62,13 @@ def _add_format_options(parser: argparse.ArgumentParser, text_help: str | None =
 def _add_common_options(parser: argparse.ArgumentParser) -> None:
     """Add common options to the parser.
 
+    Adds options that are common to all commands:
+
+    - Logging options (--log-file to specify log output)
+    - Verbosity control (-v/--verbose for detailed output)
+
+    These options help with debugging and monitoring the tool's operation.
+
     Args:
         parser: The parser to add options to
     """
@@ -55,6 +87,19 @@ def _add_common_options(parser: argparse.ArgumentParser) -> None:
 
 def _add_references_parser(subparsers: _SubParsersAction[argparse.ArgumentParser]) -> None:
     """Add the references command parser.
+
+    Configures the 'references' command which analyzes cell references in FreeCAD documents.
+    The command supports multiple output formats and grouping options:
+
+    Format Options (mutually exclusive):
+    - --by-alias: Group by alias name (default)
+    - --by-object: Group by object name
+    - --by-file: Group by filename
+    - --json: JSON output
+    - --csv: CSV output
+
+    Filter Options:
+    - --filter: Pattern to filter aliases (e.g., 'Length*')
 
     Args:
         subparsers: The subparsers to add the references parser to
@@ -102,6 +147,17 @@ def _add_references_parser(subparsers: _SubParsersAction[argparse.ArgumentParser
 def _add_properties_parser(subparsers: _SubParsersAction[argparse.ArgumentParser]) -> None:
     """Add the properties command parser.
 
+    Configures the 'properties' command which extracts and displays document properties
+    from FreeCAD files. The command supports multiple output formats:
+
+    Format Options (mutually exclusive):
+    - --text: Simple list output (default)
+    - --json: JSON output
+    - --csv: CSV output
+
+    Filter Options:
+    - --filter: Pattern to filter properties (e.g., 'Shape*')
+
     Args:
         subparsers: The subparsers to add the properties parser to
     """
@@ -125,6 +181,17 @@ def _add_properties_parser(subparsers: _SubParsersAction[argparse.ArgumentParser
 def _add_aliases_parser(subparsers: _SubParsersAction[argparse.ArgumentParser]) -> None:
     """Add the aliases command parser.
 
+    Configures the 'aliases' command which extracts cell aliases from FreeCAD spreadsheets.
+    The command supports multiple output formats:
+
+    Format Options (mutually exclusive):
+    - --text: Text output (default)
+    - --json: JSON output
+    - --csv: CSV output
+
+    Filter Options:
+    - --filter: Comma-separated patterns to filter aliases
+
     Args:
         subparsers: The subparsers to add the aliases parser to
     """
@@ -145,11 +212,21 @@ def _add_aliases_parser(subparsers: _SubParsersAction[argparse.ArgumentParser]) 
 def parse_args(argv: Sequence[str | Path] | None = None) -> argparse.Namespace:
     """Parse command line arguments.
 
+    Main entry point for parsing command line arguments. Configures and runs the argument
+    parser with all available commands and their options. Supports three main commands:
+
+    1. properties: Extract document properties
+    2. references: Analyze cell references
+    3. aliases: Extract spreadsheet cell aliases
+
+    Each command has its own set of format and filter options.
+
     Args:
-        argv: Command line arguments
+        argv: Command line arguments to parse. If None, sys.argv[1:] is used.
 
     Returns:
-        Parsed arguments
+        Parsed arguments as a Namespace object containing all specified options
+        and their values.
     """
     parser = argparse.ArgumentParser(
         prog="fc-audit",

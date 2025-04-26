@@ -21,6 +21,9 @@ def is_fcstd_file(filepath: Path) -> bool:
     if not filepath.is_file():
         return False
 
+    if not is_pathname_valid(str(filepath)):
+        return False
+
     if not zipfile.is_zipfile(filepath):
         return False
 

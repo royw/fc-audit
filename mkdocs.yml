@@ -44,7 +44,6 @@ plugins:
             show_root_heading: true
             show_root_full_path: true
             show_if_no_docstring: true
-            filters: ["!^_"]
             heading_level: 2
 
 markdown_extensions:
@@ -68,6 +67,7 @@ nav:
   - API Reference:
     - CLI: reference/cli.md
     - FreeCAD Document: reference/fcstd.md
+    - Parser: reference/parser.md
     - Alias Output: reference/alias_outputter.md
     - Properties Output: reference/properties_outputter.md
     - Reference Collection: reference/reference_collector.md

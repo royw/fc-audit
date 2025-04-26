@@ -1,17 +1,25 @@
 ---
-title: FreeCAD Document Handling
+title: FreeCAD Document Parser
 ---
 
-This page documents the FreeCAD document handling functionality. The fcstd module is responsible for:
+This module provides functions for parsing FreeCAD document files (.FCStd) and extracting:
 
-- Parsing FreeCAD document files (FCStd format)
-- Extracting properties, aliases, and expressions
-- Analyzing references between objects
-- Managing document context and state
+- Document properties
+- Spreadsheet cell aliases
+- References between documents
 
-This module is the core of fc-audit's functionality, providing a high-level API for working with FreeCAD documents.
+## Public Functions
 
-::: fc_audit.fcstd
+::: fc_audit.fcstd.get_document_properties_with_context
     options:
       show_root_heading: true
       show_source: true
+
+::: fc_audit.fcstd.get_cell_aliases
+    options:
+      show_root_heading: true
+      show_source: true
+
+## Protected Functions
+
+These functions are for internal use within the module.

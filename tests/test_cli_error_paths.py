@@ -11,11 +11,11 @@ from pytest_mock import MockerFixture
 from fc_audit.cli import (
     _filter_aliases,
     _filter_references_by_patterns,
-    handle_get_aliases,
-    handle_get_properties,
-    handle_get_references,
+    _handle_get_aliases,
+    _handle_get_properties,
+    _handle_get_references,
+    _valid_files,
     main,
-    valid_files,
 )
 from fc_audit.exceptions import InvalidFileError
 
@@ -56,34 +56,34 @@ def test_filter_aliases_no_matches() -> None:
     assert _filter_aliases(aliases, "nomatch*") == set()
 
 
-def test_valid_files_nonexistent() -> None:
-    """Test that valid_files filters out non-existent files."""
+def test__valid_files_nonexistent() -> None:
+    """Test that _valid_files filters out non-existent files."""
     files: list[Path] = [Path("nonexistent.FCStd")]
-    assert list(valid_files(files)) == []
+    assert list(_valid_files(files)) == []
 
 
-def test_valid_files_invalid_extension() -> None:
-    """Test that valid_files filters out files with wrong extension."""
+def test__valid_files_invalid_extension() -> None:
+    """Test that _valid_files filters out files with wrong extension."""
     files: list[Path] = [Path(__file__)]  # Use this test file as an example
-    assert list(valid_files(files)) == []
+    assert list(_valid_files(files)) == []
 
 
-def test_valid_files_invalid_fcstd(mocker: MockerFixture) -> None:
-    """Test that valid_files filters out invalid FCStd files."""
+def test__valid_files_invalid_fcstd(mocker: MockerFixture) -> None:
+    """Test that _valid_files filters out invalid FCStd files."""
     mocker.patch("fc_audit.validation.is_fcstd_file", return_value=False)
     files: list[Path] = [Path("test.FCStd")]
-    assert list(valid_files(files)) == []
+    assert list(_valid_files(files)) == []
 
 
-def test_valid_files_error(mocker: MockerFixture) -> None:
-    """Test that valid_files handles errors when checking files."""
+def test__valid_files_error(mocker: MockerFixture) -> None:
+    """Test that _valid_files handles errors when checking files."""
     mocker.patch("fc_audit.validation.is_fcstd_file", side_effect=Exception("Test error"))
     files: list[Path] = [Path("test.FCStd")]
-    assert list(valid_files(files)) == []
+    assert list(_valid_files(files)) == []
 
 
-def test_handle_get_properties_error(mocker: MockerFixture, tmp_path: Path) -> None:
-    """Test handle_get_properties error path."""
+def test__handle_get_properties_error(mocker: MockerFixture, tmp_path: Path) -> None:
+    """Test _handle_get_properties error path."""
 
     class MockArgs(Namespace):
         filter: str | None = None
@@ -99,11 +99,11 @@ def test_handle_get_properties_error(mocker: MockerFixture, tmp_path: Path) -> N
     mock_outputter.side_effect = InvalidFileError("Test error")
 
     args = MockArgs()
-    assert handle_get_properties(args, [bad_file]) == 1
+    assert _handle_get_properties(args, [bad_file]) == 1
 
 
-def test_handle_get_properties_filter_error(mocker: MockerFixture, tmp_path: Path) -> None:
-    """Test handle_get_properties error path when filtering properties."""
+def test__handle_get_properties_filter_error(mocker: MockerFixture, tmp_path: Path) -> None:
+    """Test _handle_get_properties error path when filtering properties."""
 
     class MockArgs(Namespace):
         filter: str = "test*"
@@ -121,11 +121,11 @@ def test_handle_get_properties_filter_error(mocker: MockerFixture, tmp_path: Pat
     mocker.patch("fc_audit.cli.PropertiesOutputter", return_value=mock_outputter)
 
     args = MockArgs()
-    assert handle_get_properties(args, [bad_file]) == 1
+    assert _handle_get_properties(args, [bad_file]) == 1
 
 
-def test_handle_get_properties_output_error(mocker: MockerFixture, tmp_path: Path) -> None:
-    """Test handle_get_properties error path when outputting properties."""
+def test__handle_get_properties_output_error(mocker: MockerFixture, tmp_path: Path) -> None:
+    """Test _handle_get_properties error path when outputting properties."""
 
     class MockArgs(Namespace):
         filter: str | None = None
@@ -142,11 +142,11 @@ def test_handle_get_properties_output_error(mocker: MockerFixture, tmp_path: Pat
     mocker.patch("fc_audit.cli.PropertiesOutputter", return_value=mock_outputter)
 
     args = MockArgs()
-    assert handle_get_properties(args, [bad_file]) == 1
+    assert _handle_get_properties(args, [bad_file]) == 1
 
 
-def test_handle_get_aliases_error(mocker: MockerFixture, tmp_path: Path) -> None:
-    """Test handle_get_aliases error path."""
+def test__handle_get_aliases_error(mocker: MockerFixture, tmp_path: Path) -> None:
+    """Test _handle_get_aliases error path."""
 
     class MockArgs(Namespace):
         filter: str | None = None
@@ -162,11 +162,11 @@ def test_handle_get_aliases_error(mocker: MockerFixture, tmp_path: Path) -> None
     mock_outputter.side_effect = InvalidFileError("Test error")
 
     args = MockArgs()
-    assert handle_get_aliases(args, [bad_file]) == 1
+    assert _handle_get_aliases(args, [bad_file]) == 1
 
 
-def test_handle_get_aliases_output_error(mocker: MockerFixture, tmp_path: Path) -> None:
-    """Test handle_get_aliases error path when outputting aliases."""
+def test__handle_get_aliases_output_error(mocker: MockerFixture, tmp_path: Path) -> None:
+    """Test _handle_get_aliases error path when outputting aliases."""
 
     class MockArgs(Namespace):
         filter: str | None = None
@@ -183,11 +183,11 @@ def test_handle_get_aliases_output_error(mocker: MockerFixture, tmp_path: Path) 
     mocker.patch("fc_audit.cli.AliasOutputter", return_value=mock_outputter)
 
     args = MockArgs()
-    assert handle_get_aliases(args, [bad_file]) == 1
+    assert _handle_get_aliases(args, [bad_file]) == 1
 
 
-def test_handle_get_references_error(mocker: MockerFixture, tmp_path: Path) -> None:
-    """Test handle_get_references error path."""
+def test__handle_get_references_error(mocker: MockerFixture, tmp_path: Path) -> None:
+    """Test _handle_get_references error path."""
 
     class MockArgs(Namespace):
         filter: str | None = None
@@ -203,7 +203,7 @@ def test_handle_get_references_error(mocker: MockerFixture, tmp_path: Path) -> N
     mock_collector.side_effect = InvalidFileError("Test error")
 
     args = MockArgs()
-    assert handle_get_references(args, [bad_file]) == 1
+    assert _handle_get_references(args, [bad_file]) == 1
 
 
 def test_main_no_args() -> None:

@@ -9,7 +9,27 @@ This page documents the custom exceptions used in fc-audit. The exceptions modul
 - Type-safe exception handling
 - Consistent error reporting across the application
 
-::: fc_audit.exceptions
+::: fc_audit.exceptions.FCAuditError
+    options:
+      show_root_heading: true
+      show_source: true
+
+::: fc_audit.exceptions.InvalidFileError
+    options:
+      show_root_heading: true
+      show_source: true
+
+::: fc_audit.exceptions.XMLParseError
+    options:
+      show_root_heading: true
+      show_source: true
+
+::: fc_audit.exceptions.ReferenceError
+    options:
+      show_root_heading: true
+      show_source: true
+
+::: fc_audit.exceptions.ExpressionError
     options:
       show_root_heading: true
       show_source: true

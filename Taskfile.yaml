@@ -215,9 +215,15 @@ tasks:
       - task: docs:build
       - uv run --python .venv/bin/python mkdocs serve
 
+  docs:verify:
+    desc: Verify that all functions are documented
+    cmds:
+      - uv run --python .venv/bin/python scripts/verify_docs.py
+
   docs:build:
     desc: Build documentation
     cmds:
+      - task: docs:verify
       - uv run --python .venv/bin/python mkdocs build
 
   docs:serve:

@@ -11,9 +11,7 @@ import pytest
 from loguru import logger
 
 from fc_audit.cli import (
-    format_by_file,
-    format_by_object,
-    handle_get_references,
+    _handle_get_references,
     main,
     parse_args,
     setup_logging,
@@ -401,37 +399,6 @@ def test_main_none_args(capsys: pytest.CaptureFixture[str]) -> None:
     assert "DEBUG" in captured.err
 
 
-def test_format_by_object_edge_cases() -> None:
-    """Test format_by_object with edge cases."""
-    # Test with empty references
-    assert format_by_object({}) == {}
-
-    # Test with reference missing filename
-    refs = {
-        "Length": [
-            Reference(
-                object_name="Box",
-                expression="<<globals>>#<<params>>.Length",
-                filename=None,
-                spreadsheet="params",
-                alias="Length",
-            ),
-            Reference(
-                object_name="Box",
-                expression="<<globals>>#<<params>>.Length",
-                filename="test.FCStd",
-                spreadsheet="params",
-                alias="Length",
-            ),
-        ]
-    }
-    result = format_by_object(refs)
-    assert len(result) == 1
-    assert "test.FCStd" in result
-    assert "Box" in result["test.FCStd"]
-    assert "Length" in result["test.FCStd"]["Box"]
-
-
 def test_by_file_sort_order(capsys: pytest.CaptureFixture[str]) -> None:
     """Test that --by-file output is sorted by file, alias, then object."""
     from fc_audit.reference_collector import Reference
@@ -641,14 +608,14 @@ def test_references_invalid_files(tmp_path: Path, capsys: pytest.CaptureFixture[
         by_alias=False,
     )
     # Should exit with error code 1 and print error message
-    result = handle_get_references(args, args.files)
+    result = _handle_get_references(args, args.files)
     assert result == 1
     captured = capsys.readouterr()
     assert "No alias references found" in captured.out
 
     args.files = [invalid]
     # Should exit with error code 1 and print error message
-    result = handle_get_references(args, args.files)
+    result = _handle_get_references(args, args.files)
     assert result == 1
     captured = capsys.readouterr()
     assert "No alias references found" in captured.out
@@ -669,50 +636,3 @@ def test_main_entry_point(capsys: pytest.CaptureFixture[str]) -> None:
         main_entry(["invalid"])
     captured = capsys.readouterr()
     assert "error:" in captured.err
-
-
-def test_format_by_file_edge_cases() -> None:
-    """Test format_by_file with edge cases."""
-    # Test with empty references
-    assert format_by_file({}) == {}
-
-    # Test with reference missing filename
-    refs = {
-        "Length": [
-            Reference(
-                object_name="Box",
-                expression="<<globals>>#<<params>>.Length",
-                filename=None,
-                spreadsheet="params",
-                alias="Length",
-            ),
-            Reference(
-                object_name="Box",
-                expression="<<globals>>#<<params>>.Length",
-                filename="test.FCStd",
-                spreadsheet="params",
-                alias="Length",
-            ),
-        ]
-    }
-    result = format_by_file(refs)
-    assert len(result) == 1
-    assert "test.FCStd" in result
-    assert "Length" in result["test.FCStd"]
-
-    # Test with reference missing alias
-    refs = {
-        "Length": [
-            Reference(
-                object_name="Box",
-                expression="<<globals>>#<<params>>.Length",
-                filename="test.FCStd",
-                spreadsheet="params",
-                alias="",
-            )
-        ]
-    }
-    result = format_by_file(refs)
-    assert len(result) == 1
-    assert "test.FCStd" in result
-    assert "Length" in result["test.FCStd"]

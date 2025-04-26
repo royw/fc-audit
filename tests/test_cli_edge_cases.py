@@ -9,9 +9,9 @@ from pytest_mock import MockerFixture
 
 from fc_audit.cli import (
     _filter_aliases,
-    handle_get_aliases,
-    handle_get_properties,
-    handle_get_references,
+    _handle_get_aliases,
+    _handle_get_properties,
+    _handle_get_references,
 )
 from fc_audit.exceptions import InvalidFileError
 
@@ -28,8 +28,8 @@ def test_filter_aliases_no_matches() -> None:
     assert _filter_aliases(aliases, "nomatch*") == set()
 
 
-def test_handle_get_properties_all_files_error(tmp_path: Path, mocker: MockerFixture) -> None:
-    """Test handle_get_properties when all files have errors."""
+def test__handle_get_properties_all_files_error(tmp_path: Path, mocker: MockerFixture) -> None:
+    """Test _handle_get_properties when all files have errors."""
 
     class MockArgs(Namespace):
         filter: str | None = None
@@ -45,11 +45,11 @@ def test_handle_get_properties_all_files_error(tmp_path: Path, mocker: MockerFix
     mock_outputter.side_effect = InvalidFileError("Test error")
 
     args = MockArgs()
-    assert handle_get_properties(args, [bad_file]) == 1
+    assert _handle_get_properties(args, [bad_file]) == 1
 
 
-def test_handle_get_aliases_all_files_error(tmp_path: Path) -> None:
-    """Test handle_get_aliases when all files have errors."""
+def test__handle_get_aliases_all_files_error(tmp_path: Path) -> None:
+    """Test _handle_get_aliases when all files have errors."""
 
     class MockArgs(Namespace):
         filter: str | None = None
@@ -60,11 +60,11 @@ def test_handle_get_aliases_all_files_error(tmp_path: Path) -> None:
     bad_file.touch()
 
     args = MockArgs()
-    assert handle_get_aliases(args, [bad_file]) == 1
+    assert _handle_get_aliases(args, [bad_file]) == 1
 
 
-def test_handle_get_aliases_no_aliases(tmp_path: Path, mocker: MockerFixture) -> None:
-    """Test handle_get_aliases when no aliases are found."""
+def test__handle_get_aliases_no_aliases(tmp_path: Path, mocker: MockerFixture) -> None:
+    """Test _handle_get_aliases when no aliases are found."""
 
     class MockArgs(Namespace):
         filter: str | None = None
@@ -78,11 +78,11 @@ def test_handle_get_aliases_no_aliases(tmp_path: Path, mocker: MockerFixture) ->
     mocker.patch("fc_audit.cli.get_cell_aliases", return_value=set())
 
     args = MockArgs()
-    assert handle_get_aliases(args, [mock_file]) == 0
+    assert _handle_get_aliases(args, [mock_file]) == 0
 
 
-def test_handle_get_references_all_files_error(tmp_path: Path) -> None:
-    """Test handle_get_references when all files have errors."""
+def test__handle_get_references_all_files_error(tmp_path: Path) -> None:
+    """Test _handle_get_references when all files have errors."""
 
     class MockArgs(Namespace):
         filter: str | None = None
@@ -96,11 +96,11 @@ def test_handle_get_references_all_files_error(tmp_path: Path) -> None:
     bad_file.touch()
 
     args = MockArgs()
-    assert handle_get_references(args, [bad_file]) == 1
+    assert _handle_get_references(args, [bad_file]) == 1
 
 
-def test_handle_get_references_general_error(tmp_path: Path, mocker: MockerFixture) -> None:
-    """Test handle_get_references when a general error occurs."""
+def test__handle_get_references_general_error(tmp_path: Path, mocker: MockerFixture) -> None:
+    """Test _handle_get_references when a general error occurs."""
 
     class MockArgs(Namespace):
         filter: str | None = None
@@ -117,11 +117,11 @@ def test_handle_get_references_general_error(tmp_path: Path, mocker: MockerFixtu
     mocker.patch("fc_audit.cli.ReferenceCollector", side_effect=Exception("Test error"))
 
     args = MockArgs()
-    assert handle_get_references(args, [mock_file]) == 1
+    assert _handle_get_references(args, [mock_file]) == 1
 
 
-def test_handle_get_references_invalid_format_combination(mocker: MockerFixture) -> None:
-    """Test handle_get_references with invalid format combination."""
+def test__handle_get_references_invalid_format_combination(mocker: MockerFixture) -> None:
+    """Test _handle_get_references with invalid format combination."""
 
     class MockArgs(Namespace):
         filter: str | None = None
@@ -138,4 +138,4 @@ def test_handle_get_references_invalid_format_combination(mocker: MockerFixture)
     )
 
     args = MockArgs()
-    assert handle_get_references(args, [Path("test.FCStd")]) == 1
+    assert _handle_get_references(args, [Path("test.FCStd")]) == 1

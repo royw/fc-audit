@@ -2,14 +2,15 @@
 title: Logging Configuration
 ---
 
-This page documents the logging configuration functionality. The logging module is responsible for:
+This module provides functions for configuring the application's logging system:
 
-- Setting up consistent logging across the application
-- Configuring log levels and formats
-- Managing log output destinations
-- Providing debug logging capabilities
+- Setting up log file output
+- Configuring log levels
+- Formatting log messages
 
-::: fc_audit.logging
+## Public Functions
+
+::: fc_audit.logging.setup_logging
     options:
       show_root_heading: true
       show_source: true

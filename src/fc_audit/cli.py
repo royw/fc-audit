@@ -22,107 +22,29 @@ from .reference_outputter import ReferenceOutputter
 from .validation import is_fcstd_file
 
 
-def _ensure_reference_path_exists(
-    by_file_obj: dict[str, dict[str, dict[str, list[Reference]]]],
-    filename: str,
-    object_name: str,
-    alias: str,
-) -> None:
-    """Ensure all necessary dictionary paths exist for a reference.
-
-    Args:
-        by_file_obj: The target dictionary to update
-        filename: Name of the file containing the reference
-        object_name: Name of the object containing the reference
-        alias: Name of the alias being referenced
-    """
-    if filename not in by_file_obj:
-        by_file_obj[filename] = {}
-    if object_name not in by_file_obj[filename]:
-        by_file_obj[filename][object_name] = {}
-    if alias not in by_file_obj[filename][object_name]:
-        by_file_obj[filename][object_name][alias] = []
-
-
-def format_by_object(
-    references: dict[str, list[Reference]],
-) -> dict[str, dict[str, dict[str, list[Reference]]]]:
-    """Format references grouped by file and object.
-
-    Args:
-        references: Dictionary mapping alias names to lists of references
-
-    Returns:
-        Dictionary with structure:
-        {
-            filename: {
-                object_name: {
-                    alias: [references]
-                }
-            }
-        }
-        Returns empty dict if references is empty.
-    """
-    if not references:
-        return {}
-
-    by_file_obj: dict[str, dict[str, dict[str, list[Reference]]]] = {}
-
-    for alias, refs in references.items():
-        for ref in refs:
-            if ref.filename is not None:
-                _ensure_reference_path_exists(by_file_obj, ref.filename, ref.object_name, alias)
-                by_file_obj[ref.filename][ref.object_name][alias].append(ref)
-
-    return by_file_obj
-
-
-def format_by_file(
-    references: dict[str, list[Reference]],
-) -> dict[str, dict[str, list[Reference]]]:
-    """Format references grouped by file and alias.
-
-    Args:
-        references: Dictionary mapping alias names to lists of references
-
-    Returns:
-        Dictionary with structure:
-        {
-            filename: {
-                alias: [references]
-            }
-        }
-        Returns empty dict if references is empty.
-    """
-    if not references:
-        return {}
-    by_file: dict[str, dict[str, list[Reference]]] = {}
-    alias: str
-    refs: list[Reference]
-    for alias, refs in references.items():
-        ref: Reference
-        for ref in refs:
-            if ref.filename is not None:
-                if ref.filename not in by_file:
-                    by_file[ref.filename] = {}
-                if alias not in by_file[ref.filename]:
-                    by_file[ref.filename][alias] = []
-                by_file[ref.filename][alias].append(ref)
-    return by_file
-
-
 def _filter_references_by_patterns(
     references: dict[str, list[Reference]], patterns: str
 ) -> dict[str, list[Reference]]:
-    """Filter references by alias patterns.
+    """Filter references by alias patterns using glob-style matching.
+
+    This function filters the references dictionary by matching alias names against
+    the provided patterns. Each pattern is treated as a glob pattern (e.g., '*width*'
+    would match 'BoxWidth', 'width', etc.).
 
     Args:
-        references: Dictionary of references to filter
-        patterns: Comma-separated patterns to match against
+        references: Dictionary mapping alias names to lists of references
+        patterns: Comma-separated glob patterns to match against alias names
+            (e.g., 'width*,height*,*length')
 
     Returns:
-        Filtered dictionary of references. If patterns is empty,
-        returns the original references.
+        A new dictionary containing only the references whose aliases match at least
+        one of the patterns. If patterns is empty or None, returns the original
+        references dictionary unmodified.
+
+    Example:
+        >>> refs = {"Width": [...], "Height": [...], "Length": [...]}
+        >>> _filter_references_by_patterns(refs, "W*,L*")
+        {'Width': [...], 'Length': [...]}
     """
     if not patterns:
         return references
@@ -137,14 +59,26 @@ def _filter_references_by_patterns(
 
 
 def _filter_aliases(aliases: set[str], patterns: str) -> set[str]:
-    """Filter aliases by patterns.
+    """Filter aliases by glob patterns.
+
+    This function filters a set of aliases by matching them against the provided
+    glob patterns. Similar to _filter_references_by_patterns but operates on a
+    simple set of strings rather than a dictionary of references.
 
     Args:
-        aliases: Set of aliases to filter
-        patterns: Comma-separated patterns to match against
+        aliases: Set of alias names to filter
+        patterns: Comma-separated glob patterns to match against alias names
+            (e.g., 'width*,height*,*length')
 
     Returns:
-        Filtered set of aliases
+        A new set containing only the aliases that match at least one of the
+        patterns. If patterns is empty or None, returns the original set of
+        aliases unmodified.
+
+    Example:
+        >>> aliases = {"Width", "Height", "Length"}
+        >>> _filter_aliases(aliases, "W*,L*")
+        {'Width', 'Length'}
     """
     if not patterns:
         return aliases
@@ -157,15 +91,28 @@ def _filter_aliases(aliases: set[str], patterns: str) -> set[str]:
     return filtered_aliases
 
 
-def handle_get_properties(args: argparse.Namespace, file_paths: list[Path]) -> int:
-    """Handle get-properties command.
+def _handle_get_properties(args: argparse.Namespace, file_paths: list[Path]) -> int:
+    """Handle the get-properties command by extracting and outputting FreeCAD document properties.
+
+    For each valid FreeCAD document, this function:
+    1. Creates a PropertiesOutputter instance
+    2. Applies any requested property filters
+    3. Outputs the properties in the specified format (text, JSON, or CSV)
 
     Args:
-        args: Command line arguments
-        file_paths: List of valid file paths to process
+        args: Command line arguments containing:
+            - filter: Optional glob patterns to filter properties
+            - format: Output format (text, json, or csv)
+            - output: Optional output file path
+        file_paths: List of valid FreeCAD document paths to process
 
     Returns:
-        Exit code (0 for success, non-zero for error)
+        0 if at least one file was processed successfully
+        1 if no files were processed successfully or if errors occurred
+
+    Note:
+        Errors during processing of individual files are logged but don't
+        immediately stop execution - the function attempts to process all files.
     """
     success = False
 
@@ -182,15 +129,33 @@ def handle_get_properties(args: argparse.Namespace, file_paths: list[Path]) -> i
     return 0 if success else 1
 
 
-def handle_get_aliases(args: argparse.Namespace, files: list[Path]) -> int:
-    """Handle get-aliases command.
+def _handle_get_aliases(args: argparse.Namespace, files: list[Path]) -> int:
+    """Handle the get-aliases command by extracting and outputting spreadsheet cell aliases.
+
+    For each valid FreeCAD document, this function:
+    1. Extracts all spreadsheet cell aliases
+    2. Optionally filters aliases using glob patterns
+    3. Outputs the aliases in the specified format (text, JSON, or CSV)
 
     Args:
-        args: Command line arguments
-        files: List of valid files to process
+        args: Command line arguments containing:
+            - filter: Optional glob patterns to filter aliases
+            - format: Output format (text, json, or csv)
+            - output: Optional output file path
+        files: List of valid FreeCAD document paths to process
 
     Returns:
-        Exit code
+        0 if at least one file was processed successfully
+        1 if no files were processed successfully or if errors occurred
+
+    Note:
+        Errors during processing of individual files are logged but don't
+        immediately stop execution - the function attempts to process all files.
+
+    Example output formats:
+        text: One alias per line
+        json: ["alias1", "alias2", ...]
+        csv: alias,\nalias1,\nalias2,\n...
     """
     try:
         file_aliases: set[str]
@@ -218,15 +183,33 @@ def handle_get_aliases(args: argparse.Namespace, files: list[Path]) -> int:
         return 1
 
 
-def handle_get_references(args: argparse.Namespace, file_paths: list[Path]) -> int:
-    """Handle get-references command.
+def _handle_get_references(args: argparse.Namespace, file_paths: list[Path]) -> int:
+    """Handle the get-references command by extracting and outputting spreadsheet references.
+
+    This function analyzes FreeCAD documents to find references between spreadsheets,
+    including cross-document references. For each valid document, it:
+    1. Collects all spreadsheet cell references
+    2. Optionally filters references by alias patterns
+    3. Formats references by file and object or by file only
+    4. Outputs the references in the specified format
 
     Args:
-        args: Command line arguments
-        file_paths: List of valid file paths to process.
+        args: Command line arguments containing:
+            - filter: Optional glob patterns to filter references by alias
+            - format: Output format (text, json, or csv)
+            - output: Optional output file path
+            - by_file: Group references by file only
+            - by_object: Group references by file and object
+        file_paths: List of valid FreeCAD document paths to process
 
     Returns:
-        Exit code (0 for success, non-zero for error)
+        0 if at least one file was processed successfully
+        1 if no files were processed successfully or if errors occurred
+
+    Note:
+        - If both by_file and by_object are False, references are grouped by alias
+        - Cross-document references are included and show the source document
+        - Errors during processing are logged but don't stop execution
     """
     try:
         collector = ReferenceCollector(file_paths)
@@ -249,14 +232,28 @@ def handle_get_references(args: argparse.Namespace, file_paths: list[Path]) -> i
         return 1
 
 
-def valid_files(files: list[Path]) -> Iterable[Path]:
+def _valid_files(files: list[Path]) -> Iterable[Path]:
     """Filter out non-existent files and invalid FCStd files from the list.
 
+    This function validates each file path by checking:
+    1. The file exists on the filesystem
+    2. The file is a valid FreeCAD document (.FCStd)
+
+    Invalid files are logged with appropriate error messages but don't cause
+    the function to raise exceptions.
+
     Args:
-        files: List of file paths to validate
+        files: List of file paths to validate. Each path should be a Path object
+            pointing to a potential FreeCAD document.
 
     Returns:
-        Iterator of valid FCStd file paths
+        An iterator yielding only the valid FreeCAD document paths. The order
+        of the input list is preserved for valid files.
+
+    Example:
+        >>> paths = [Path("valid.FCStd"), Path("missing.FCStd"), Path("not_fcstd.txt")]
+        >>> list(_valid_files(paths))
+        [Path('valid.FCStd')]
     """
     for path in files:
         if not path.exists():
@@ -274,11 +271,29 @@ def valid_files(files: list[Path]) -> Iterable[Path]:
 def main(argv: Sequence[str] | None = None) -> int:
     """Main entry point for the command line interface.
 
+    This function:
+    1. Parses command line arguments
+    2. Sets up logging based on verbosity and log file options
+    3. Validates input files
+    4. Dispatches to the appropriate command handler
+
+    Supported commands:
+    - get-properties: Extract and output document properties
+    - get-aliases: Extract and output spreadsheet cell aliases
+    - get-references: Extract and output spreadsheet references
+
     Args:
-        argv: Command line arguments
+        argv: Command line arguments as a sequence of strings. If None,
+            sys.argv[1:] is used.
 
     Returns:
-        Exit code (0 for success, non-zero for error)
+        0 on successful execution of the requested command
+        1 on error (invalid arguments, no valid files, command failure)
+        2 on invalid command
+
+    Example:
+        >>> main(["get-aliases", "doc.FCStd", "--format", "json"])
+        0  # Success
     """
     try:
         # parse command line arguments
@@ -289,16 +304,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         setup_logging(getattr(args, "log_file", None), getattr(args, "verbose", False))
 
         # reduce the list of files to process (arg.files) to a list of valid FCStd files
-        valid_paths = list(valid_files(args.files))
+        valid_paths = list(_valid_files(args.files))
         if not valid_paths:
             print("No valid files provided", file=sys.stderr)
             return 1
 
         # dispatch to the appropriate handler based on the command
         dispatch_table = {
-            "references": handle_get_references,
-            "properties": handle_get_properties,
-            "aliases": handle_get_aliases,
+            "references": _handle_get_references,
+            "properties": _handle_get_properties,
+            "aliases": _handle_get_aliases,
         }
         handler = dispatch_table.get(args.command)
         if handler is None:

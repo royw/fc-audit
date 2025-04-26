@@ -1,16 +1,20 @@
 ---
-title: Validation
+title: Input Validation
 ---
 
-This page documents the validation functionality. The validation module is responsible for:
+This module provides functions for validating input files and paths:
 
-- Validating FreeCAD document files
-- Validating file and directory paths across different operating systems
-- Handling platform-specific path restrictions
-- Checking for invalid characters and reserved names
-- Providing consistent validation behavior across platforms
+- Checking if a file is a valid FreeCAD document
+- Validating file paths for the current operating system
 
-::: fc_audit.validation
+## Public Functions
+
+::: fc_audit.validation.is_fcstd_file
+    options:
+      show_root_heading: true
+      show_source: true
+
+::: fc_audit.validation.is_pathname_valid
     options:
       show_root_heading: true
       show_source: true

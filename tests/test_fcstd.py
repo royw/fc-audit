@@ -14,9 +14,9 @@ from fc_audit.fcstd import (
     XMLParseError,
     _parse_document_references,
     _parse_expression_element,
+    _parse_reference,
     get_cell_aliases,
     get_document_properties_with_context,
-    parse_reference,
 )
 from fc_audit.validation import is_fcstd_file
 
@@ -69,7 +69,7 @@ def create_fcstd_file(filepath: Path, xml_content: str) -> None:
         zf.writestr("Document.xml", xml_content)
 
 
-def test_parse_reference_basic() -> None:
+def test__parse_reference_basic() -> None:
     """Test parsing of basic reference expressions."""
     root = etree.fromstring(
         b"""<?xml version='1.0' encoding='utf-8'?>
@@ -83,14 +83,14 @@ def test_parse_reference_basic() -> None:
     )
     expr1 = root.find(".//Property[@name='Test1']")
     assert expr1 is not None
-    assert parse_reference(expr1) == "Length"
+    assert _parse_reference(expr1) == "Length"
 
 
-def test_parse_reference_with_spaces() -> None:
+def test__parse_reference_with_spaces() -> None:
     """Test parsing of reference expressions with spaces."""
     # Test with spaces in the expression
     expr = "<<globals>>#<<params>>. Length "
-    assert parse_reference(expr) == "Length"
+    assert _parse_reference(expr) == "Length"
 
     # Test with spaces in XML
     root = etree.fromstring(
@@ -105,10 +105,10 @@ def test_parse_reference_with_spaces() -> None:
     )
     expr1 = root.find(".//Property[@name='Test1']")
     assert expr1 is not None
-    assert parse_reference(expr1) == "Length"
+    assert _parse_reference(expr1) == "Length"
 
 
-def test_parse_reference_with_special_chars() -> None:
+def test__parse_reference_with_special_chars() -> None:
     """Test parsing of reference expressions with special characters."""
     root = etree.fromstring(
         b"""<?xml version='1.0' encoding='utf-8'?>
@@ -122,10 +122,10 @@ def test_parse_reference_with_special_chars() -> None:
     )
     expr = root.find(".//Property[@name='Test1']")
     assert expr is not None
-    assert parse_reference(expr) == "Length_123"
+    assert _parse_reference(expr) == "Length_123"
 
 
-def test_parse_reference_with_math() -> None:
+def test__parse_reference_with_math() -> None:
     """Test parsing of reference expressions with mathematical operations."""
     root = etree.fromstring(
         b"""<?xml version='1.0' encoding='utf-8'?>
@@ -139,10 +139,10 @@ def test_parse_reference_with_math() -> None:
     )
     expr = root.find(".//Property[@name='Test1']")
     assert expr is not None
-    assert parse_reference(expr) == "Height"
+    assert _parse_reference(expr) == "Height"
 
 
-def test_parse_reference_invalid() -> None:
+def test__parse_reference_invalid() -> None:
     """Test parsing of invalid reference expressions.
     Verifies that None is returned for expressions that don't match
     the expected format (e.g., simple values, cell references, empty strings)."""
@@ -162,15 +162,15 @@ def test_parse_reference_invalid() -> None:
 
     expr1 = root.find(".//Property[@name='Test1']")
     assert expr1 is not None
-    assert parse_reference(expr1) is None
+    assert _parse_reference(expr1) is None
 
     expr2 = root.find(".//Property[@name='Test2']")
     assert expr2 is not None
-    assert parse_reference(expr2) is None
+    assert _parse_reference(expr2) is None
 
     expr3 = root.find(".//Property[@name='Test3']")
     assert expr3 is not None
-    assert parse_reference(expr3) is None
+    assert _parse_reference(expr3) is None
 
 
 def test_parse_document_references(sample_xml: str) -> None:
@@ -250,7 +250,7 @@ def test_parse_expression_element_error_handling() -> None:
     assert _parse_expression_element(expr_elem_missing, "obj", "test.FCStd") is None
 
     # Test with invalid expression format
-    assert parse_reference("invalid.expression") is None
+    assert _parse_reference("invalid.expression") is None
 
 
 def test_is_fcstd_file_error_handling(tmp_path: Path) -> None:
