@@ -1,0 +1,43 @@
+# Code Quality Standards
+max_cyclomatic_complexity = 5
+max_line_length = 100
+min_test_coverage = 90
+
+# Documentation Requirements
+docstring_style = "google"
+require_docstrings = true
+require_type_hints = true
+require_examples = true
+
+# Project Structure
+src_layout = true
+tests_dir = "tests"
+docs_dir = "docs"
+scripts_dir = "scripts"
+
+# Development Practices
+branch_prefix = "feature/"
+commit_convention = "conventional"
+require_pre_commit = true
+require_task_automation = true
+
+# Code Review Standards
+max_file_changes = 500
+require_tests = true
+require_documentation = true
+
+# Dependencies
+python_min_version = "3.11"
+use_uv = true
+use_ruff = true
+use_mypy = true
+
+# Documentation Tools
+use_mkdocs = true
+use_mkdocstrings = true
+use_gen_files = true
+
+# Testing
+test_framework = "pytest"
+require_coverage_report = true
+require_type_checking = true
