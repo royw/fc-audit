@@ -19,6 +19,8 @@ from argparse import _SubParsersAction
 from collections.abc import Sequence
 from pathlib import Path
 
+from .version import __version__
+
 
 def _add_format_options(parser: argparse.ArgumentParser, text_help: str | None = None) -> None:
     """Add common format options to a parser.
@@ -79,10 +81,10 @@ def _add_common_options(parser: argparse.ArgumentParser) -> None:
         help="Path to log file",
     )
     parser.add_argument(
-        "-v",
-        "--verbose",
+        "-d",
+        "--debug",
         action="store_true",
-        help="Enable verbose output",
+        help="Enable debug output",
     )
 
 
@@ -234,9 +236,13 @@ def parse_args(argv: Sequence[str | Path] | None = None) -> argparse.Namespace:
         Parsed arguments as a Namespace object containing all specified options
         and their values.
     """
-    parser = argparse.ArgumentParser(
-        prog="fc-audit",
-        description="Analyze FreeCAD documents for cell references",
+    parser = argparse.ArgumentParser(prog="fc-audit", description="Analyze FreeCAD documents for cell references")
+    parser.add_argument(
+        "-V",
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
+        help="Show program version and exit",
     )
 
     _add_common_options(parser)

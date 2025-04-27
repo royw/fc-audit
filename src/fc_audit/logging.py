@@ -10,14 +10,14 @@ from loguru import logger
 from fc_audit.validation import is_pathname_valid
 
 
-def setup_logging(log_file: str | None = None, verbose: bool = False) -> None:
+def setup_logging(log_file: str | None = None, debug: bool = False) -> None:
     """Configure logging settings.
 
     Args:
         log_file: Optional path to log file
-        verbose: If True, set log level to DEBUG
+        debug: If True, set log level to DEBUG
     """
-    level: str = "DEBUG" if verbose else "INFO"
+    level: str = "DEBUG" if debug else "INFO"
 
     # Remove default handler
     logger.remove()

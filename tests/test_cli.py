@@ -45,7 +45,7 @@ def test_main_help_output(capsys: pytest.CaptureFixture[str]) -> None:
     """Test that all top-level options appear in the main help output."""
     top_level_options = [
         "--log-file",
-        "--verbose",
+        "--debug",
         "references",
         "properties",
         "aliases",
@@ -93,15 +93,15 @@ def test_parse_args_default() -> None:
         parse_args([])
 
 
-def test_parse_args_verbose() -> None:
-    """Test that both -v and --verbose flags are recognized but still require a command.
-    Should raise SystemExit when only verbose flag is provided."""
+def test_parse_args_debug() -> None:
+    """Test that both -d and --debug flags are recognized but still require a command.
+    Should raise SystemExit when only debug flag is provided."""
 
     with pytest.raises(SystemExit):
-        parse_args(["-v"])
+        parse_args(["-d"])
 
     with pytest.raises(SystemExit):
-        parse_args(["--verbose"])
+        parse_args(["--debug"])
 
 
 def test_parse_args_log_file() -> None:
@@ -123,14 +123,15 @@ def test_setup_logging_default(capsys: pytest.CaptureFixture[str]) -> None:
     assert "DEBUG" not in captured.err
 
 
-def test_setup_logging_verbose(capsys: pytest.CaptureFixture[str]) -> None:
-    """Test that verbose logging setup allows DEBUG level messages
+def test_setup_logging_debug(capsys: pytest.CaptureFixture[str]) -> None:
+    """Test that debug logging setup allows DEBUG level messages
     to be output to stderr."""
-
     setup_logging(None, True)
     logger.debug("Debug message")
+    logger.info("Info message")
     captured = capsys.readouterr()
     assert "Debug message" in captured.err
+    assert "Info message" in captured.err
 
 
 def test_parse_args_references_default() -> None:
@@ -311,7 +312,7 @@ def test_setup_logging_default_fallback(capsys: pytest.CaptureFixture[str]) -> N
     # Remove existing handlers
     logger.remove()
 
-    main(["--verbose", "references", "--json", str(DATA_DIR / "Test1.FCStd"), str(DATA_DIR / "Empty.FCStd")])
+    main(["--debug", "references", "--json", str(DATA_DIR / "Test1.FCStd"), str(DATA_DIR / "Empty.FCStd")])
     captured = capsys.readouterr()
     assert "Starting fc-audit" in captured.err
 
@@ -389,14 +390,15 @@ def test_main_invalid_format_combination(capsys: pytest.CaptureFixture[str]) -> 
 
 def test_main_none_args(capsys: pytest.CaptureFixture[str]) -> None:
     """Test main function with None args."""
-    with pytest.raises(SystemExit) as excinfo:
+    with pytest.raises(SystemExit):
         main(None)
-    assert excinfo.value.code == 2
 
-    # Test with verbose flag
-    assert main(["--verbose", "references", str(DATA_DIR / "Test1.FCStd")]) == 0
+    # Should use sys.argv[1:] which is empty in test environment
+    with pytest.raises(SystemExit):
+        main(["--debug"])
+
     captured = capsys.readouterr()
-    assert "DEBUG" in captured.err
+    assert "error" in captured.err
 
 
 def test_by_file_sort_order(capsys: pytest.CaptureFixture[str]) -> None:

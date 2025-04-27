@@ -301,7 +301,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         args: argparse.Namespace = parse_args(argv)
 
         # configure logging
-        setup_logging(getattr(args, "log_file", None), getattr(args, "verbose", False))
+        setup_logging(getattr(args, "log_file", None), getattr(args, "debug", False))
 
         # reduce the list of files to process (arg.files) to a list of valid FCStd files
         valid_paths = list(_valid_files(args.files))
