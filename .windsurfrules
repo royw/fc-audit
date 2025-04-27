@@ -20,6 +20,7 @@ branch_prefix = "feature/"
 commit_convention = "conventional"
 require_pre_commit = true
 require_task_automation = true
+use_taskfile = true  # Use tasks defined in Taskfile.yaml (e.g., "task lint", "task test")
 
 # Code Review Standards
 max_file_changes = 500

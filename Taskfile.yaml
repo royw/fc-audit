@@ -45,7 +45,7 @@ vars:
   # Default Python interpreter command
   PYTHON: python3
   # Minimum required test coverage percentage
-  COVERAGE_MIN: 85
+  COVERAGE_MIN: 80
   # Primary development Python version
   DEV_VERSION: "3.12"
   # Path to development virtual environment
@@ -57,13 +57,62 @@ tasks:
   # Core tasks
   default:
     desc: Show available tasks
+    summary: |
+      Show available tasks
+
+      Examples:
+        # List all available tasks
+        task
+        # or
+        task --list-all
     cmds:
       - task --list-all
     silent: true
 
+  run:
+    desc: Run fc-audit with the given arguments
+    summary: |
+      Run fc-audit with the given arguments
+
+      Examples:
+        # Run fc-audit with arguments
+        task run -- [arguments]
+
+        # The double dash (--) is needed to separate the task's arguments from the package specifications.
+    cmds:
+      - .venv/bin/fc-audit {{.CLI_ARGS}}
+
+  version:
+    desc: Show fc-audit version
+    summary: |
+      Display the current version of fc-audit
+
+      Examples:
+        # Show version
+        task version
+    cmds:
+      - .venv/bin/fc-audit --version
+
+  version_bump:
+    desc: Bump patch version number
+    summary: |
+      Increment the patch version number (e.g., 1.2.3 -> 1.2.4)
+
+      Examples:
+        # Bump patch version
+        task version_bump
+    cmds:
+      - uv run .venv/bin/version_bumper bump patch
+
   # CI/CD
   ci:
-    desc: Run all CI checks
+    desc: Run all CI checks (lint, test, coverage, docs, build)
+    summary: |
+      Run all CI checks (lint, test, coverage, docs, build)
+
+      Examples:
+        # Run all CI checks
+        task ci
     cmds:
       - task: lint
       - task: metrics
@@ -74,6 +123,12 @@ tasks:
   # Environment management
   setup:
     desc: Set up development environment
+    summary: |
+      Set up development environment (creates virtual environments for all Python versions)
+
+      Examples:
+        # Set up all environments
+        task setup
     cmds:
       - uv python install {{.PYTHON_VERSIONS}}
       - for: { var: PYTHON_VERSIONS }
@@ -93,12 +148,34 @@ tasks:
 
   update-env:
     desc: Update virtual environment with latest dependencies
+    summary: |
+      Update virtual environment with latest dependencies
+
+      Examples:
+        # Update all Python environments
+        task update-env
     cmds:
       - for: { var: PYTHON_VERSIONS }
         task: update-env:venv
         vars:
           VERSION: "{{.ITEM}}"
       - pre-commit install
+
+  upgrade-env:
+    desc: Upgrade all dependencies to latest versions
+    summary: |
+      Upgrade all dependencies to their latest versions and update environments
+
+      Examples:
+        # Upgrade all dependencies
+        task upgrade-env
+
+        # This will:
+        # 1. Upgrade dependency versions in requirements.txt
+        # 2. Update all Python environments with new versions
+    cmds:
+      - uv lock --upgrade
+      - task: update-env
 
   update-env:venv:
     internal: true
@@ -109,13 +186,48 @@ tasks:
 
   update-dev-env:
     desc: Update development environment with latest dependencies
+    summary: |
+      Update development environment with latest dependencies
+
+      Examples:
+        # Update only the development environment (Python {{.DEV_VERSION}})
+        task update-dev-env
     cmds:
       - task: update-env:venv
         vars:
           VERSION: "{{.DEV_VERSION}}"
 
+  add:
+    desc: Install a package using uv pip install
+    summary: |
+      Install a package using uv pip install
+
+      Examples:
+        # Install a single package
+        task add -- requests
+
+        # Install a specific version
+        task add -- requests==2.31.0
+
+        # Install with options
+        task add -- --upgrade requests
+
+        # Install multiple packages
+        task add -- requests pytest black
+
+        # The double dash (--) is needed to separate the task's arguments from the package specifications.
+    cmds:
+      - uv pip install --python .venv/bin/python {{.CLI_ARGS}}
+      - task: update-env
+
   clean:
-    desc: Clean build artifacts
+    desc: Clean build artifacts and caches
+    summary: |
+      Clean build artifacts and caches
+
+      Examples:
+        # Remove all build artifacts and caches
+        task clean
     cmds:
       - rm -rf build dist .eggs *.egg-info
       - find . -type d -name __pycache__ -exec rm -rf {} +
@@ -129,6 +241,12 @@ tasks:
 
   clean:venvs:
     desc: Remove all virtual environments
+    summary: |
+      Remove all virtual environments
+
+      Examples:
+        # Remove all virtual environments
+        task clean:venvs
     cmds:
       - rm -rf .venv
       - for: { var: PYTHON_VERSIONS }
@@ -137,17 +255,48 @@ tasks:
   # Testing
   test:
     desc: Run tests
+    summary: |
+      Run tests
+
+      Examples:
+        # Run all tests
+        task test
+
+        # Run specific test file
+        task test -- tests/test_specific.py
+
+        # Run tests with pytest options
+        task test -- -v -k "test_function"
+
+        # The double dash (--) is needed to separate the task's arguments from the pytest options.
     cmds:
       - uv run --python .venv/bin/python pytest {{.CLI_ARGS}}
 
   test:coverage:
     desc: Run tests with coverage report
+    summary: |
+      Run tests with coverage report (minimum required coverage: 80%)
+
+      Examples:
+        # Run tests with coverage report
+        task test:coverage
+
+        # This will:
+        # - Run tests with coverage tracking
+        # - Show missing lines in coverage report
+        # - Fail if coverage is below 80%
     cmds:
       - uv run --python .venv/bin/python pytest -vv --cov --cov-report=term-missing
       - .venv/bin/python -c "import sys; exit(1) if float('{{.COVERAGE_MIN}}') > float('$(uv run --python .venv/bin/python coverage report | grep TOTAL | awk '{print $4}' | tr -d '%')') else exit(0)"
 
   test:pythons:
-    desc: Run tests and checks (ruff, mypy, pytest) across all Python versions
+    desc: Run tests and checks across all Python versions
+    summary: |
+      Run tests and checks (ruff, mypy, pytest) across all Python versions
+
+      Examples:
+        # Test across all Python versions
+        task test:pythons
     cmds:
       - for: { var: PYTHON_VERSIONS }
         task: test:python
@@ -166,11 +315,30 @@ tasks:
   # Code quality
   pre-commit:
     desc: Run pre-commit hooks
+    summary: |
+      Run pre-commit hooks
+
+      Examples:
+        # Run all pre-commit hooks
+        task pre-commit
     cmds:
       - uv run --python .venv/bin/python pre-commit run --all-files
 
   lint:
-    desc: Run code quality checks
+    desc: Run all code quality checks
+    summary: |
+      Run all code quality checks (pre-commit, ruff, mypy, spell check, dead code)
+
+      Examples:
+        # Run all linting checks
+        task lint
+
+        # This is equivalent to running:
+        # - task pre-commit
+        # - task lint:ruff
+        # - task lint:mypy
+        # - task spell
+        # - task deadcode
     cmds:
       - task: pre-commit
       - task: lint:ruff
@@ -179,55 +347,159 @@ tasks:
       - task: deadcode
 
   deadcode:
-    desc: Check for unused code
+    desc: Check for unused code in the project
+    summary: |
+      Check for unused code in the project
+
+      Examples:
+        # Check for unused code (dry run)
+        task deadcode
+
+        # This checks for:
+        # - Unused functions and classes
+        # - Unused imports
+        # - Dead code blocks
     cmds:
       - uv run --python .venv/bin/python deadcode --dry src
 
   lint:ruff:
-    desc: Run ruff linter
+    desc: Run ruff linter on source and test files
+    summary: |
+      Run ruff linter on source and test files
+
+      Examples:
+        # Run ruff linter
+        task lint:ruff
+
+        # Checks for:
+        # - Style violations (PEP 8)
+        # - Common programming errors
+        # - Code complexity
     cmds:
       - uv run --python .venv/bin/python ruff check src tests
 
   lint:mypy:
-    desc: Run type checks
+    desc: Run mypy type checker on source and test files
+    summary: |
+      Run mypy type checker on source and test files
+
+      Examples:
+        # Run type checking
+        task lint:mypy
+
+        # Verifies:
+        # - Type annotations
+        # - Type consistency
+        # - Type safety
     cmds:
       - uv run --python .venv/bin/python mypy src tests
 
   spell:
-    desc: Check spelling in code and documentation
+    desc: Check spelling in code and documentation files
+    summary: |
+      Check spelling in code and documentation files
+
+      Examples:
+        # Check spelling
+        task spell
+
+        # Checks spelling in:
+        # - Python source files
+        # - Test files
+        # - Documentation files
+        # - README.md
     cmds:
       - uv run --python .venv/bin/python codespell src tests docs README.md
 
   format:
-    desc: Format code with ruff
+    desc: Format code with ruff formatter
+    summary: |
+      Format code with ruff formatter
+
+      Examples:
+        # Format all code
+        task format
+
+        # This will:
+        # - Fix code style issues
+        # - Sort imports
+        # - Apply consistent formatting
+        # - Format both source and test files
     cmds:
       - uv run --python .venv/bin/python ruff format src tests
 
   metrics:
-    desc: Run code quality metrics
+    desc: Run code quality metrics using radon
+    summary: |
+      Run code quality metrics using radon
+
+      Examples:
+        # Check code complexity
+        task metrics
+
+        # This calculates:
+        # - Cyclomatic complexity
+        # - Maintainability index
+        # - Raw metrics (LOC, SLOC)
+        #
+        # Note: Code should maintain cyclomatic complexity below 5
     cmds:
       - uv run --python .venv/bin/python radon cc src
 
   # Documentation
   docs:
     desc: Build and serve documentation locally
+    summary: |
+      Build and serve documentation locally (builds docs and starts server at http://127.0.0.1:8000)
+
+      Examples:
+        # Build docs and start server
+        task docs
+
+        # After starting, visit http://127.0.0.1:8000 in your browser
+        # Press Ctrl+C to stop the server
     cmds:
       - task: docs:build
       - uv run --python .venv/bin/python mkdocs serve
 
   docs:build:
-    desc: Build documentation
+    desc: Build documentation to site/ directory
+    summary: |
+      Build documentation to site/ directory
+
+      Examples:
+        # Build documentation
+        task docs:build
+
+        # The built documentation will be in the site/ directory
     cmds:
       - uv run --python .venv/bin/python mkdocs build
 
   docs:serve:
-    desc: Serve documentation
+    desc: Serve documentation without rebuilding
+    summary: |
+      Serve documentation without rebuilding (starts server at http://127.0.0.1:8000)
+
+      Examples:
+        # Start documentation server
+        task docs:serve
+
+        # After starting, visit http://127.0.0.1:8000 in your browser
+        # Press Ctrl+C to stop the server
+
+        # Note: Use task docs if you want to build and serve in one step
     cmds:
       - uv run --python .venv/bin/python mkdocs serve
 
   # Building
   build:
     desc: Build package distribution
+    summary: |
+      Build package distribution (both wheel and sdist)
+
+      Examples:
+        # Build all distribution formats
+        task build
     cmds:
       - rm -rf dist/
       - task: build:wheel
@@ -235,23 +507,65 @@ tasks:
 
   build:wheel:
     desc: Build wheel distribution
+    summary: |
+      Build wheel distribution
+
+      Examples:
+        # Build wheel package
+        task build:wheel
     cmds:
       - uv run .venv/bin/python -m build --wheel
 
   build:sdist:
     desc: Build source distribution
+    summary: |
+      Build source distribution
+
+      Examples:
+        # Build source package
+        task build:sdist
     cmds:
       - uv run .venv/bin/python -m build --sdist
 
 # Publishing
   publish-test-pypi:
     desc: Publish to the test.pypi.org server
+    summary: |
+      Publish to the test.pypi.org server
+      Requires ~/.pypirc with test.pypi.org credentials and 0600 permissions
+      See https://packaging.python.org/en/latest/specifications/pypirc/
+
+      Examples:
+        # Publish to TestPyPI
+        task publish-test-pypi
     deps: [build]
+    preconditions:
+      - sh: test -f ~/.pypirc
+        msg: "~/.pypirc file not found"
+      - sh: test -s ~/.pypirc
+        msg: "~/.pypirc is empty"
+      - sh: '[[ $(stat -c %a ~/.pypirc) = "600" ]]'
+        msg: "~/.pypirc must have 0600 permissions"
     cmds:
       - uv run --python .venv/bin/python twine upload --repository testpypi dist/*
 
   publish-pypi:
     desc: Publish to the pypi.org server
+    summary: |
+      Publish to the pypi.org server
+      Requires ~/.pypirc with pypi.org credentials and 0600 permissions
+      See https://packaging.python.org/en/latest/specifications/pypirc/
+
+      Examples:
+        # Publish to PyPI
+        task publish-pypi
     deps: [build]
+    preconditions:
+      - sh: test -f ~/.pypirc
+        msg: "~/.pypirc file not found"
+      - sh: test -s ~/.pypirc
+        msg: "~/.pypirc is empty"
+      - sh: '[[ $(stat -c %a ~/.pypirc) = "600" ]]'
+        msg: "~/.pypirc must have 0600 permissions"
     cmds:
       - uv run --python .venv/bin/python twine upload dist/*

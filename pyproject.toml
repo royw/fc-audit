@@ -10,7 +10,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fc-audit"
-version = "0.1.4"
+version = "0.1.5"
 description = "Command line audit tool"
 readme = "README.md"
 
